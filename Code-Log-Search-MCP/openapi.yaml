@@ -1,0 +1,61 @@
+openapi: 3.0.3
+info:
+  title: Code-Log-Search-MCP
+  version: 0.1.0
+servers:
+  - url: http://127.0.0.1:7080
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200': { description: OK }
+  /actions/search_code:
+    post:
+      summary: Search codebase with ripgrep
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query: { type: string }
+                root: { type: string }
+                globs: { type: array, items: { type: string } }
+                maxResults: { type: integer }
+                contextLines: { type: integer }
+              required: [query]
+      responses:
+        '200':
+          description: Code hits
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hits:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        file: { type: string }
+                        line: { type: integer }
+                        preview: { type: string }
+  /actions/search_logs:
+    post:
+      summary: Search logs JSONL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query: { type: string }
+                date: { type: string, description: YYYYMMDD }
+                mode: { type: string }
+                maxResults: { type: integer }
+              required: [query]
+      responses:
+        '200': { description: Log entries }

@@ -1,0 +1,80 @@
+openapi: 3.0.3
+info:
+  title: Memory-MCP
+  version: 0.1.0
+servers:
+  - url: http://127.0.0.1:7090
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200': { description: OK }
+  /actions/write_memory:
+    post:
+      summary: Write a memory entry (versioned)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                project: { type: string, nullable: true }
+                scope: { type: string, enum: [project, global] }
+                key: { type: string, nullable: true }
+                text: { type: string }
+                tags: { type: array, items: { type: string } }
+                ttlSec: { type: integer, nullable: true }
+                metadata: { type: object, nullable: true }
+              required: [text]
+      responses:
+        '200': { description: Memory entry }
+  /actions/read_memory:
+    post:
+      summary: Read memory by id or latest by project+key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id: { type: string }
+                project: { type: string }
+                key: { type: string }
+      responses:
+        '200': { description: Memory entry or null }
+  /actions/search_memory:
+    post:
+      summary: Search memory (FTS)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query: { type: string }
+                project: { type: string }
+                tags: { type: array, items: { type: string } }
+                k: { type: integer }
+              required: [query]
+      responses:
+        '200': { description: Search hits }
+  /actions/list_memories:
+    post:
+      summary: List memory entries
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                project: { type: string }
+                tags: { type: array, items: { type: string } }
+                limit: { type: integer }
+                offset: { type: integer }
+      responses:
+        '200': { description: Memory entries }

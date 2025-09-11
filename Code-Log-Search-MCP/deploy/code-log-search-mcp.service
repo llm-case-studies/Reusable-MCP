@@ -1,0 +1,12 @@
+[Unit]
+Description=Code-Log-Search-MCP HTTP/SSE Server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/env python3 %h/Projects/iHomeNerd/Code-Log-Search-MCP/server/app.py --host 127.0.0.1 --port 7080 --default-code-root %h/Projects/iHomeNerd --logs-root %h/.roadnerd/logs
+Restart=on-failure
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

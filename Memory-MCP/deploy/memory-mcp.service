@@ -1,0 +1,12 @@
+[Unit]
+Description=Memory-MCP HTTP/SSE Server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/env python3 %h/Projects/iHomeNerd/Memory-MCP/server/app.py --home %h/.roadnerd/memorydb --host 127.0.0.1 --port 7090
+Restart=on-failure
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target
