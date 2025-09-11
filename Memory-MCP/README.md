@@ -8,3 +8,34 @@ A small, reusable HTTP/SSE MCP service that provides durable, project‑scoped m
 - License: MIT
 
 See docs/QUICKSTART.md and docs/SPEC.md for details.
+
+## Data Model (Quick Reference)
+- A memory is a versioned entry, not a plain KV:
+  - id, version, project?, key?, scope (`project|global`), text, tags[], createdAt, ttlSec?, metadata?
+- Keyed writes (project + key) auto‑increment version; `read_memory` returns the latest for that key.
+- Unkeyed writes (no key) are append‑only notes; use `search_memory`/`list_memories` to retrieve.
+
+## API Docs (Swagger)
+- Start server: `python3 -m server.app --home ~/.roadnerd/memorydb --port 7090`
+- Open: `http://127.0.0.1:7090/docs` (Swagger) and `/redoc` (ReDoc)
+- Bodies are fully typed (project, scope, key, text, tags, ttlSec, metadata); responses include `createdAt`.
+
+## Examples
+- Write (keyed):
+  ```bash
+  curl -s -X POST http://127.0.0.1:7090/actions/write_memory \
+    -H 'Content-Type: application/json' \
+    -d '{"project":"RoadNerd","scope":"project","key":"policy","text":"Dynamic tokens: max(512, n*120)","tags":["decision","prompt"],"metadata":{"source":"doc"}}'
+  ```
+- Read latest by key:
+  ```bash
+  curl -s -X POST http://127.0.0.1:7090/actions/read_memory \
+    -H 'Content-Type: application/json' \
+    -d '{"project":"RoadNerd","key":"policy"}'
+  ```
+- Search:
+  ```bash
+  curl -s -X POST http://127.0.0.1:7090/actions/search_memory \
+    -H 'Content-Type: application/json' \
+    -d '{"query":"tokens","project":"RoadNerd","k":5}'
+  ```
