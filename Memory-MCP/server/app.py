@@ -3,11 +3,12 @@ import argparse
 import json
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 try:
     from fastapi import FastAPI, Request
     from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
+    from pydantic import BaseModel
     import uvicorn
 except Exception:
     print("Missing dependencies: fastapi, uvicorn")
@@ -15,6 +16,62 @@ except Exception:
     raise SystemExit(1)
 
 from .storage import init_db, write_memory, read_memory, search_memory, list_memories
+
+
+# ----- Pydantic models for better OpenAPI docs -----
+class MemoryEntryModel(BaseModel):
+    id: str
+    version: int
+    project: Optional[str] = None
+    key: Optional[str] = None
+    scope: str
+    text: str
+    tags: List[str] = []
+    createdAt: str
+    ttlSec: Optional[int] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class WriteMemoryRequest(BaseModel):
+    project: Optional[str] = None
+    scope: str = 'project'
+    key: Optional[str] = None
+    text: str
+    tags: Optional[List[str]] = None
+    ttlSec: Optional[int] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class ReadMemoryRequest(BaseModel):
+    id: Optional[str] = None
+    project: Optional[str] = None
+    key: Optional[str] = None
+
+
+class ReadMemoryResponse(BaseModel):
+    entry: Optional[MemoryEntryModel] = None
+
+
+class SearchMemoryRequest(BaseModel):
+    query: str
+    project: Optional[str] = None
+    tags: Optional[List[str]] = None
+    k: int = 20
+
+
+class SearchMemoryResponse(BaseModel):
+    items: List[MemoryEntryModel]
+
+
+class ListMemoriesRequest(BaseModel):
+    project: Optional[str] = None
+    tags: Optional[List[str]] = None
+    limit: int = 50
+    offset: int = 0
+
+
+class ListMemoriesResponse(BaseModel):
+    items: List[MemoryEntryModel]
 
 
 def _auth_ok(request: Request) -> bool:
@@ -35,54 +92,42 @@ def create_app(home: Path) -> FastAPI:
     def healthz():
         return {'ok': True, 'home': str(home)}
 
-    @app.post('/actions/write_memory')
-    async def http_write_memory(req: Request):
-        if not _auth_ok(req):
+    @app.post('/actions/write_memory', response_model=MemoryEntryModel)
+    async def http_write_memory(request: Request, body: WriteMemoryRequest):
+        if not _auth_ok(request):
             return JSONResponse({'error': 'unauthorized'}, status_code=401)
-        body = await req.json()
-        project = body.get('project')
-        scope = body.get('scope') or 'project'
-        key = body.get('key')
-        text = body.get('text') or ''
-        tags = body.get('tags') or []
-        ttl_sec = body.get('ttlSec')
-        metadata = body.get('metadata')
-        entry = write_memory(con, home, project=project, scope=scope, key=key, text=text, tags=tags, ttl_sec=ttl_sec, metadata=metadata)
+        entry = write_memory(
+            con,
+            home,
+            project=body.project,
+            scope=body.scope or 'project',
+            key=body.key,
+            text=body.text or '',
+            tags=body.tags or [],
+            ttl_sec=body.ttlSec,
+            metadata=body.metadata,
+        )
         return JSONResponse(entry.__dict__)
 
-    @app.post('/actions/read_memory')
-    async def http_read_memory(req: Request):
-        if not _auth_ok(req):
+    @app.post('/actions/read_memory', response_model=ReadMemoryResponse)
+    async def http_read_memory(request: Request, body: ReadMemoryRequest):
+        if not _auth_ok(request):
             return JSONResponse({'error': 'unauthorized'}, status_code=401)
-        body = await req.json()
-        eid = body.get('id')
-        project = body.get('project')
-        key = body.get('key')
-        entry = read_memory(con, id=eid, project=project, key=key)
+        entry = read_memory(con, id=body.id, project=body.project, key=body.key)
         return JSONResponse({'entry': entry.__dict__ if entry else None})
 
-    @app.post('/actions/search_memory')
-    async def http_search_memory(req: Request):
-        if not _auth_ok(req):
+    @app.post('/actions/search_memory', response_model=SearchMemoryResponse)
+    async def http_search_memory(request: Request, body: SearchMemoryRequest):
+        if not _auth_ok(request):
             return JSONResponse({'error': 'unauthorized'}, status_code=401)
-        body = await req.json()
-        query = body.get('query') or ''
-        project = body.get('project')
-        tags = body.get('tags') or []
-        k = int(body.get('k', 20))
-        items = search_memory(con, query=query, project=project, tags=tags, k=k)
+        items = search_memory(con, query=body.query or '', project=body.project, tags=body.tags or [], k=int(body.k or 20))
         return JSONResponse({'items': [e.__dict__ for e in items]})
 
-    @app.post('/actions/list_memories')
-    async def http_list_memories(req: Request):
-        if not _auth_ok(req):
+    @app.post('/actions/list_memories', response_model=ListMemoriesResponse)
+    async def http_list_memories(request: Request, body: ListMemoriesRequest):
+        if not _auth_ok(request):
             return JSONResponse({'error': 'unauthorized'}, status_code=401)
-        body = await req.json()
-        project = body.get('project')
-        tags = body.get('tags') or []
-        limit = int(body.get('limit', 50))
-        offset = int(body.get('offset', 0))
-        items = list_memories(con, project=project, tags=tags, limit=limit, offset=offset)
+        items = list_memories(con, project=body.project, tags=body.tags or [], limit=int(body.limit), offset=int(body.offset))
         return JSONResponse({'items': [e.__dict__ for e in items]})
 
     @app.get('/sse/stream_search_memory')
