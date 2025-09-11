@@ -7,7 +7,7 @@ from typing import Optional
 
 try:
     from fastapi import FastAPI, Request
-    from fastapi.responses import JSONResponse, StreamingResponse
+    from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
     import uvicorn
 except Exception:
     print("Missing dependencies: fastapi, uvicorn")
@@ -179,7 +179,7 @@ def create_app(home: Path) -> FastAPI:
         </body>
         </html>
         '''
-        return html
+        return HTMLResponse(content=html)
 
     return app
 
