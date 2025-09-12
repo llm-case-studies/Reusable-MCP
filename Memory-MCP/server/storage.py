@@ -3,7 +3,7 @@ import json
 import sqlite3
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Any
 
@@ -86,7 +86,8 @@ def write_memory(con: sqlite3.Connection, home: Path, *, project: Optional[str],
             version = int(row[0]) + 1
 
     mid = str(uuid.uuid4())
-    now = datetime.now().isoformat()
+    # RFC3339 compliant timestamp with timezone
+    now = datetime.now(timezone.utc).isoformat()
     tags_str = ','.join(tags) if tags else ''
     md_json = json.dumps(metadata) if metadata else None
 
@@ -171,4 +172,3 @@ def list_memories(con: sqlite3.Connection, *, project: Optional[str] = None, tag
     args.extend([limit, offset])
     cur = con.execute(sql, args)
     return [_to_entry(row) for row in cur.fetchall()]
-

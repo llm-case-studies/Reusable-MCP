@@ -56,3 +56,15 @@ See docs/QUICKSTART.md and docs/SPEC.md for details.
     -H 'Content-Type: application/json' \
     -d '{"query":"tokens","project":"RoadNerd","k":5}'
   ```
+
+## Dev script (tests + server + smoke)
+- Script: `run-tests-and-server.sh`
+- Flags:
+  - `--no-tests` skip pytest
+  - `--clean-home` remove `$MEM_HOME` before starting
+  - `--kill-port` free the `--port` if occupied (uses `fuser`/`lsof` when available)
+  - `--smoke` start in background, run health check + MCP initialize/tools.list + write/read, then restart in foreground
+- Host/port are passed through (e.g., `--host 127.0.0.1 --port 7090`).
+- Examples:
+  - `./run-tests-and-server.sh --kill-port --clean-home --smoke --host 127.0.0.1 --port 7090`
+  - `MEM_LOG_LEVEL=DEBUG MEM_DEBUG=1 ./run-tests-and-server.sh --no-tests --smoke`
