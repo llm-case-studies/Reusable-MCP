@@ -89,66 +89,115 @@ def create_app(home: Path) -> FastAPI:
     con = init_db(home)
     PROTOCOL_VERSION = '2025-06-18'
 
+    def _memory_entry_schema():
+        return {
+            'type': ['object', 'null'],
+            'description': 'Versioned memory entry (null when not found).',
+            'properties': {
+                'id': {'type': 'string', 'description': 'Unique memory id (UUID).'},
+                'version': {'type': 'integer', 'description': 'Monotonic version per project+key.'},
+                'project': {'type': ['string','null'], 'description': 'Project namespace.'},
+                'key': {'type': ['string','null'], 'description': 'Optional memory key (name).'},
+                'scope': {'type': 'string', 'enum': ['project','global'], 'description': 'Scope selection.'},
+                'text': {'type': 'string', 'description': 'Entry body.'},
+                'tags': {'type': 'array', 'items': {'type': 'string'}, 'description': 'Free‑form labels.'},
+                'createdAt': {'type': 'string', 'format': 'date-time', 'description': 'Creation timestamp (ISO8601).'},
+                'ttlSec': {'type': ['integer','null'], 'description': 'Optional time‑to‑live in seconds.'},
+                'metadata': {'type': ['object','null'], 'description': 'Arbitrary JSON metadata.'}
+            },
+            'required': ['id','version','scope','text','tags','createdAt']
+        }
+
     def mcp_tools():
+        entry_schema = _memory_entry_schema()
         return [
             {
                 'name': 'write_memory',
                 'title': 'Write Memory',
-                'description': 'Append a memory entry; increments version when project+key provided.',
+                'description': 'Append a memory; if project+key provided, bump version and store latest.',
                 'inputSchema': {
                     'type': 'object',
                     'properties': {
-                        'project': {'type': ['string','null']},
-                        'scope': {'type': 'string', 'enum': ['project', 'global'], 'default': 'project'},
-                        'key': {'type': ['string','null']},
-                        'text': {'type': 'string'},
-                        'tags': {'type': 'array', 'items': {'type': 'string'}},
-                        'ttlSec': {'type': ['integer','null']},
-                        'metadata': {'type': ['object','null']}
+                        'project': {'type': ['string','null'], 'description': 'Project name (optional).'},
+                        'scope': {'type': 'string', 'enum': ['project', 'global'], 'default': 'project', 'description': 'Scope: project or global.'},
+                        'key': {'type': ['string','null'], 'description': 'Optional key (name) for versioned reads.'},
+                        'text': {'type': 'string', 'description': 'Entry body text.'},
+                        'tags': {'type': 'array', 'items': {'type': 'string'}, 'description': 'Labels, e.g., ["decision","prompt"].'},
+                        'ttlSec': {'type': ['integer','null'], 'minimum': 1, 'description': 'Optional TTL seconds.'},
+                        'metadata': {'type': ['object','null'], 'description': 'Arbitrary JSON metadata.'}
                     },
                     'required': ['text']
+                },
+                'outputSchema': {
+                    'type': 'object',
+                    'properties': {
+                        'entry': entry_schema
+                    },
+                    'required': ['entry']
                 }
             },
             {
                 'name': 'read_memory',
                 'title': 'Read Memory',
-                'description': 'Read by id or latest by project+key.',
+                'description': 'Read by id or latest by project+key; returns null when not found.',
                 'inputSchema': {
                     'type': 'object',
                     'properties': {
-                        'id': {'type': ['string','null']},
-                        'project': {'type': ['string','null']},
-                        'key': {'type': ['string','null']}
-                    }
+                        'id': {'type': ['string','null'], 'description': 'Exact entry id (UUID).'},
+                        'project': {'type': ['string','null'], 'description': 'Project to resolve latest by key.'},
+                        'key': {'type': ['string','null'], 'description': 'Key (name) to resolve latest entry.'}
+                    },
+                    'description': 'Provide either id, or project+key.'
+                },
+                'outputSchema': {
+                    'type': 'object',
+                    'properties': {
+                        'entry': entry_schema
+                    },
+                    'required': ['entry']
                 }
             },
             {
                 'name': 'search_memory',
                 'title': 'Search Memory',
-                'description': 'Full‑text search over memory entries (FTS).',
+                'description': 'Full‑text search (FTS) over saved entries.',
                 'inputSchema': {
                     'type': 'object',
                     'properties': {
-                        'query': {'type': 'string'},
-                        'project': {'type': ['string','null']},
-                        'tags': {'type': 'array', 'items': {'type': 'string'}},
-                        'k': {'type': 'integer', 'default': 20}
+                        'query': {'type': 'string', 'description': 'Search string (FTS query).'},
+                        'project': {'type': ['string','null'], 'description': 'Limit search to a project.'},
+                        'tags': {'type': 'array', 'items': {'type': 'string'}, 'description': 'Filter: entry must include these tags.'},
+                        'k': {'type': 'integer', 'default': 20, 'minimum': 1, 'maximum': 200, 'description': 'Max items to return.'}
                     },
                     'required': ['query']
+                },
+                'outputSchema': {
+                    'type': 'object',
+                    'properties': {
+                        'items': {'type': 'array', 'items': _memory_entry_schema(), 'description': 'Matching entries.'}
+                    },
+                    'required': ['items']
                 }
             },
             {
                 'name': 'list_memories',
                 'title': 'List Memories',
-                'description': 'List recent memory entries with optional filters.',
+                'description': 'List recent entries with optional filters.',
                 'inputSchema': {
                     'type': 'object',
                     'properties': {
-                        'project': {'type': ['string','null']},
-                        'tags': {'type': 'array', 'items': {'type': 'string'}},
-                        'limit': {'type': 'integer', 'default': 50},
-                        'offset': {'type': 'integer', 'default': 0}
+                        'project': {'type': ['string','null'], 'description': 'Limit to a project.'},
+                        'tags': {'type': 'array', 'items': {'type': 'string'}, 'description': 'Filter by tags (contains all).'},
+                        'limit': {'type': 'integer', 'default': 50, 'minimum': 1, 'maximum': 500, 'description': 'Page size.'},
+                        'offset': {'type': 'integer', 'default': 0, 'minimum': 0, 'description': 'Page offset.'}
                     }
+                },
+                'outputSchema': {
+                    'type': 'object',
+                    'properties': {
+                        'items': {'type': 'array', 'items': _memory_entry_schema(), 'description': 'Recent entries.'}
+                    },
+                    'required': ['items']
                 }
             },
         ]
