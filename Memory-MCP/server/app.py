@@ -87,6 +87,71 @@ def _auth_ok(request: Request) -> bool:
 def create_app(home: Path) -> FastAPI:
     app = FastAPI()
     con = init_db(home)
+    PROTOCOL_VERSION = '2025-06-18'
+
+    def mcp_tools():
+        return [
+            {
+                'name': 'write_memory',
+                'title': 'Write Memory',
+                'description': 'Append a memory entry; increments version when project+key provided.',
+                'inputSchema': {
+                    'type': 'object',
+                    'properties': {
+                        'project': {'type': ['string','null']},
+                        'scope': {'type': 'string', 'enum': ['project', 'global'], 'default': 'project'},
+                        'key': {'type': ['string','null']},
+                        'text': {'type': 'string'},
+                        'tags': {'type': 'array', 'items': {'type': 'string'}},
+                        'ttlSec': {'type': ['integer','null']},
+                        'metadata': {'type': ['object','null']}
+                    },
+                    'required': ['text']
+                }
+            },
+            {
+                'name': 'read_memory',
+                'title': 'Read Memory',
+                'description': 'Read by id or latest by project+key.',
+                'inputSchema': {
+                    'type': 'object',
+                    'properties': {
+                        'id': {'type': ['string','null']},
+                        'project': {'type': ['string','null']},
+                        'key': {'type': ['string','null']}
+                    }
+                }
+            },
+            {
+                'name': 'search_memory',
+                'title': 'Search Memory',
+                'description': 'Full‑text search over memory entries (FTS).',
+                'inputSchema': {
+                    'type': 'object',
+                    'properties': {
+                        'query': {'type': 'string'},
+                        'project': {'type': ['string','null']},
+                        'tags': {'type': 'array', 'items': {'type': 'string'}},
+                        'k': {'type': 'integer', 'default': 20}
+                    },
+                    'required': ['query']
+                }
+            },
+            {
+                'name': 'list_memories',
+                'title': 'List Memories',
+                'description': 'List recent memory entries with optional filters.',
+                'inputSchema': {
+                    'type': 'object',
+                    'properties': {
+                        'project': {'type': ['string','null']},
+                        'tags': {'type': 'array', 'items': {'type': 'string'}},
+                        'limit': {'type': 'integer', 'default': 50},
+                        'offset': {'type': 'integer', 'default': 0}
+                    }
+                }
+            },
+        ]
 
     @app.get('/healthz')
     def healthz():
@@ -155,6 +220,137 @@ def create_app(home: Path) -> FastAPI:
             except Exception as e:
                 yield f"event: error\n" + f"data: {json.dumps({'error': str(e)})}\n\n"
         return StreamingResponse(gen(), media_type='text/event-stream')
+
+    # ---- Minimal MCP Streamable HTTP endpoint ----
+    @app.get('/mcp')
+    async def mcp_get():
+        # We don't expose a long-lived SSE stream for GET in this minimal implementation.
+        return JSONResponse({'error': 'method not allowed'}, status_code=405)
+
+    def _mcp_response(id_value, result=None, error=None):
+        if error is not None:
+            return {'jsonrpc': '2.0', 'id': id_value, 'error': error}
+        return {'jsonrpc': '2.0', 'id': id_value, 'result': result}
+
+    def _text_and_structured(obj: Any):
+        return {
+            'content': [{'type': 'text', 'text': json.dumps(obj, ensure_ascii=False)}],
+            'structuredContent': obj,
+            'isError': False,
+        }
+
+    @app.post('/mcp')
+    async def mcp_post(request: Request):
+        # Accept either a single JSON-RPC message or a batch (list)
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({'error': 'invalid json'}, status_code=400)
+
+        async def handle_one(msg):
+            method = msg.get('method')
+            msg_id = msg.get('id')
+            params = msg.get('params') or {}
+
+            # Notifications have no id
+            is_notification = ('id' not in msg)
+
+            if method == 'initialize':
+                # Negotiate version; accept requested or reply with supported
+                requested = (params or {}).get('protocolVersion')
+                result = {
+                    'protocolVersion': requested or PROTOCOL_VERSION,
+                    'capabilities': {
+                        'tools': {'listChanged': False},
+                    },
+                    'serverInfo': {
+                        'name': 'Memory-MCP',
+                        'title': 'Memory MCP',
+                        'version': '0.1.0',
+                    },
+                    'instructions': 'Provide durable, project-scoped memory via tools.',
+                }
+                return _mcp_response(msg_id, result=result)
+
+            if method == 'notifications/initialized':
+                # Acknowledge; no response per JSON-RPC for notifications
+                return None
+
+            if method == 'tools/list':
+                return _mcp_response(msg_id, result={'tools': mcp_tools(), 'nextCursor': None})
+
+            if method == 'tools/call':
+                name = (params or {}).get('name')
+                arguments = (params or {}).get('arguments') or {}
+                try:
+                    if name == 'write_memory':
+                        entry = write_memory(
+                            con,
+                            home,
+                            project=arguments.get('project'),
+                            scope=(arguments.get('scope') or 'project'),
+                            key=arguments.get('key'),
+                            text=arguments.get('text') or '',
+                            tags=arguments.get('tags') or [],
+                            ttl_sec=arguments.get('ttlSec'),
+                            metadata=arguments.get('metadata'),
+                        )
+                        return _mcp_response(msg_id, result=_text_and_structured(entry.__dict__))
+                    elif name == 'read_memory':
+                        entry = read_memory(
+                            con,
+                            id=arguments.get('id'),
+                            project=arguments.get('project'),
+                            key=arguments.get('key'),
+                        )
+                        return _mcp_response(msg_id, result=_text_and_structured({'entry': entry.__dict__ if entry else None}))
+                    elif name == 'search_memory':
+                        items = search_memory(
+                            con,
+                            query=arguments.get('query') or '',
+                            project=arguments.get('project'),
+                            tags=arguments.get('tags') or [],
+                            k=int(arguments.get('k') or 20),
+                        )
+                        return _mcp_response(msg_id, result=_text_and_structured({'items': [e.__dict__ for e in items]}))
+                    elif name == 'list_memories':
+                        items = list_memories(
+                            con,
+                            project=arguments.get('project'),
+                            tags=arguments.get('tags') or [],
+                            limit=int(arguments.get('limit') or 50),
+                            offset=int(arguments.get('offset') or 0),
+                        )
+                        return _mcp_response(msg_id, result=_text_and_structured({'items': [e.__dict__ for e in items]}))
+                    else:
+                        return _mcp_response(msg_id, error={'code': -32602, 'message': f'Unknown tool: {name}'})
+                except Exception as e:
+                    return _mcp_response(msg_id, result={'content': [{'type': 'text', 'text': f'Error: {e}'}], 'isError': True})
+
+            if method == 'ping':
+                return _mcp_response(msg_id, result={'ok': True})
+
+            # Unknown method
+            return _mcp_response(msg_id, error={'code': -32601, 'message': f'Unknown method: {method}'})
+
+        # Process single or batch
+        if isinstance(body, list):
+            out = []
+            for m in body:
+                resp = await handle_one(m)
+                if resp is not None:
+                    out.append(resp)
+            # If all were notifications, return 202 with no body
+            if not out:
+                return JSONResponse(status_code=202, content=None)
+            return JSONResponse(out)
+        elif isinstance(body, dict):
+            resp = await handle_one(body)
+            if resp is None:
+                return JSONResponse(status_code=202, content=None)
+            return JSONResponse(resp)
+        else:
+            return JSONResponse({'error': 'invalid payload'}, status_code=400)
 
     @app.get('/mem')
     async def mem_ui():

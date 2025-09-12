@@ -20,6 +20,23 @@ See docs/QUICKSTART.md and docs/SPEC.md for details.
 - Open: `http://127.0.0.1:7090/docs` (Swagger) and `/redoc` (ReDoc)
 - Bodies are fully typed (project, scope, key, text, tags, ttlSec, metadata); responses include `createdAt`.
 
+## MCP (Streamable HTTP)
+- Endpoint: `POST http://127.0.0.1:7090/mcp` (JSON‑RPC 2.0)
+- Supported methods: `initialize`, `tools/list`, `tools/call` (tools: `write_memory`, `read_memory`, `search_memory`, `list_memories`).
+- Gemini CLI (user config `~/.gemini/settings.json`):
+  ```json
+  {
+    "mcpServers": {
+      "memory-mcp": {
+        "httpUrl": "http://127.0.0.1:7090/mcp",
+        "timeout": 15000,
+        "headers": { "Authorization": "Bearer ${MEM_TOKEN}" }
+      }
+    }
+  }
+  ```
+  Then run `gemini mcp list` and use the tools in chat.
+
 ## Examples
 - Write (keyed):
   ```bash
