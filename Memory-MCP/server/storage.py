@@ -138,8 +138,10 @@ def read_memory(con: sqlite3.Connection, *, id: Optional[str] = None, project: O
 
 def search_memory(con: sqlite3.Connection, *, query: str, project: Optional[str] = None, tags: Optional[List[str]] = None, k: int = 20) -> List[MemoryEntry]:
     # Use FTS MATCH; if project/tags filters present, intersect
-    # note: simplistic MATCH string; escape problematic chars by quoting
-    q = query.replace('"', ' ')
+    # To avoid parse errors like "no such column: ..." when users pass special tokens,
+    # treat the input as a single phrase by quoting it for FTS5.
+    q = (query or '').replace('"', ' ')
+    q = f'"{q.strip()}"' if q.strip() else '""'
     sql = "SELECT m.* FROM fts_memories f JOIN memories m ON f.rowid = m.rowid WHERE f.text MATCH ?"
     args: List[Any] = [q]
     if project is not None:
