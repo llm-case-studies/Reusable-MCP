@@ -346,7 +346,7 @@ def create_app(home: Path) -> FastAPI:
                             ttl_sec=arguments.get('ttlSec'),
                             metadata=arguments.get('metadata'),
                         )
-                        return _mcp_response(msg_id, result=_text_and_structured(entry.__dict__))
+                        return _mcp_response(msg_id, result=_text_and_structured({'entry': entry.__dict__}))
                     elif name == 'read_memory':
                         entry = read_memory(
                             con,
