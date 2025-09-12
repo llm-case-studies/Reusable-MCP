@@ -326,7 +326,9 @@ def create_app(home: Path) -> FastAPI:
                 return None
 
             if method == 'tools/list':
-                return _mcp_response(msg_id, result={'tools': mcp_tools(), 'nextCursor': None})
+                # Omit nextCursor when there is no pagination token to avoid clients
+                # rejecting `null` (some validate as string if present).
+                return _mcp_response(msg_id, result={'tools': mcp_tools()})
 
             if method == 'tools/call':
                 name = (params or {}).get('name')
