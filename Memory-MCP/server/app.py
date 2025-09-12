@@ -281,10 +281,41 @@ def create_app(home: Path) -> FastAPI:
             return {'jsonrpc': '2.0', 'id': id_value, 'error': error}
         return {'jsonrpc': '2.0', 'id': id_value, 'result': result}
 
+    def _ensure_rfc3339(dt: Optional[str]) -> Optional[str]:
+        if not isinstance(dt, str) or not dt:
+            return dt
+        # If timezone info is missing, assume UTC and append 'Z'.
+        if 'Z' in dt or '+' in dt or dt.endswith('Z'):
+            return dt
+        return dt + 'Z'
+
+    def _normalize_entry_dict(d: Dict[str, Any]) -> Dict[str, Any]:
+        if not isinstance(d, dict):
+            return d
+        ca = d.get('createdAt')
+        d['createdAt'] = _ensure_rfc3339(ca)
+        # Ensure required shapes
+        if not isinstance(d.get('tags'), list):
+            d['tags'] = [] if d.get('tags') is None else [str(d['tags'])]
+        if 'scope' in d and d['scope'] is None:
+            d['scope'] = 'project'
+        return d
+
+    def _normalize_structured(obj: Any) -> Any:
+        if isinstance(obj, dict):
+            if 'entry' in obj and isinstance(obj['entry'], dict):
+                obj['entry'] = _normalize_entry_dict(obj['entry'])
+            elif 'items' in obj and isinstance(obj['items'], list):
+                obj['items'] = [_normalize_entry_dict(x) for x in obj['items']]
+            else:
+                obj = _normalize_entry_dict(obj)
+        return obj
+
     def _text_and_structured(obj: Any):
+        norm = _normalize_structured(obj)
         return {
-            'content': [{'type': 'text', 'text': json.dumps(obj, ensure_ascii=False)}],
-            'structuredContent': obj,
+            'content': [{'type': 'text', 'text': json.dumps(norm, ensure_ascii=False)}],
+            'structuredContent': norm,
             'isError': False,
         }
 
