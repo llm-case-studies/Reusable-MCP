@@ -10,6 +10,7 @@ try:
     from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
     from pydantic import BaseModel
     import uvicorn
+    import logging
 except Exception:
     print("Missing dependencies: fastapi, uvicorn")
     print("Create a venv and: pip install fastapi uvicorn")
@@ -87,6 +88,10 @@ def _auth_ok(request: Request) -> bool:
 def create_app(home: Path) -> FastAPI:
     app = FastAPI()
     con = init_db(home)
+    # Basic logging (stdout). Control with MEM_LOG_LEVEL (e.g., DEBUG, INFO, WARNING).
+    lvl = os.environ.get('MEM_LOG_LEVEL', 'INFO').upper()
+    logging.basicConfig(level=getattr(logging, lvl, logging.INFO), format='[%(levelname)s] %(message)s')
+    LOG = logging.getLogger('memory-mcp')
     PROTOCOL_VERSION = '2025-06-18'
 
     def _memory_entry_schema():
@@ -365,6 +370,7 @@ def create_app(home: Path) -> FastAPI:
                 name = (params or {}).get('name')
                 arguments = (params or {}).get('arguments') or {}
                 try:
+                    LOG.debug("tools/call name=%s args=%s", name, {k: (v if k != 'text' else '…') for k, v in (arguments or {}).items()})
                     if name == 'write_memory':
                         entry = write_memory(
                             con,
@@ -407,7 +413,16 @@ def create_app(home: Path) -> FastAPI:
                     else:
                         return _mcp_response(msg_id, error={'code': -32602, 'message': f'Unknown tool: {name}'})
                 except Exception as e:
-                    return _mcp_response(msg_id, result={'content': [{'type': 'text', 'text': f'Error: {e}'}], 'isError': True})
+                    LOG.exception("tools/call failed: %s", e)
+                    # Tool-level error payload with diagnostics (when MEM_DEBUG enabled)
+                    debug = os.environ.get('MEM_DEBUG', '0') in ('1','true','TRUE')
+                    diag = {'error': {'message': str(e)}}
+                    if debug:
+                        diag['error']['type'] = e.__class__.__name__
+                    return _mcp_response(
+                        msg_id,
+                        result={'content': [{'type': 'text', 'text': f'Error: {e}'}], 'structuredContent': diag, 'isError': True},
+                    )
 
             if method == 'ping':
                 return _mcp_response(msg_id, result={'ok': True})
