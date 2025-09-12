@@ -36,6 +36,10 @@ See docs/QUICKSTART.md and docs/SPEC.md for details.
   }
   ```
   Then run `gemini mcp list` and use the tools in chat.
+  - Optionally add a workspace so Gemini’s Shell can run local commands/scripts without absolute paths:
+    ```json
+    {"workspaces": {"Memory-MCP": "/home/<you>/Projects/Reusable-MCP/Memory-MCP"}}
+    ```
 
 ## Examples
 - Write (keyed):
@@ -68,3 +72,9 @@ See docs/QUICKSTART.md and docs/SPEC.md for details.
 - Examples:
   - `./run-tests-and-server.sh --kill-port --clean-home --smoke --host 127.0.0.1 --port 7090`
   - `MEM_LOG_LEVEL=DEBUG MEM_DEBUG=1 ./run-tests-and-server.sh --no-tests --smoke`
+
+## Logging & Troubleshooting
+- Logging to repo: set `MEM_LOG_DIR=Memory-MCP/logs` (the dev script does this automatically) — logs append by default.
+- Add `MEM_LOG_TS=1` to create timestamped files; add `MEM_LOG_ROTATE=<bytes>` and `MEM_LOG_BACKUPS=<n>` for rotation.
+- MCP Test UI: `GET /mcp_ui` exercises `initialize`, `tools/list`, and `tools/call` directly against `/mcp` (mirrors Gemini’s usage), including Bearer auth via `localStorage`.
+- FTS search safety: user queries are quoted for FTS `MATCH` to avoid SQLite parse errors on special tokens.

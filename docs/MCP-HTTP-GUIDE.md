@@ -22,6 +22,14 @@ References
 Security notes
 - Validate `Origin` on all requests; bind to `127.0.0.1` for local development; require auth (e.g., `Authorization: Bearer ...`).
 
+Operational logging
+- Environment variables (append by default, no truncation):
+  - `MEM_LOG_DIR=<dir>`: write logs to `<dir>/app.log` (or `app-YYYYMMDD-HHMMSS.log` when `MEM_LOG_TS=1`).
+  - `MEM_LOG_FILE=<file>`: explicit log file path (overrides `MEM_LOG_DIR`).
+  - `MEM_LOG_TS=1`: add timestamp to filename when using `MEM_LOG_DIR`.
+  - `MEM_LOG_ROTATE=<bytes>` and `MEM_LOG_BACKUPS=<n>`: enable rotating logs.
+  - `MEM_LOG_LEVEL=INFO|DEBUG|...`, `MEM_DEBUG=1`: verbose/diagnostics in tool errors.
+
 ## 2) Lifecycle Messages
 - `initialize` (request) → negotiate protocol version and return server capabilities.
 - Client sends `notifications/initialized` after receiving the initialize result.
@@ -72,6 +80,7 @@ Minimal initialize shapes
     }}
     ```
   - Protocol error example: `{ "jsonrpc":"2.0","id":3,"error":{"code":-32602,"message":"Unknown tool: …"} }`
+  - Compatibility tip: omit `nextCursor` from `tools/list` when no pagination token is available (some clients expect a string when present).
 
 ## 4) FastAPI Implementation Pattern
 Create one router with `/mcp` handlers and small helpers to keep code tidy.
@@ -127,6 +136,10 @@ Create one router with `/mcp` handlers and small helpers to keep code tidy.
 - GET /mcp (optional SSE)
   - Return 405 if not supported, or open an SSE stream (e.g., `StreamingResponse(generate(), media_type="text/event-stream")`) and emit JSON‑RPC messages as text lines.
 
+Mini MCP test UI
+- Provide a small HTML UI at `/mcp_ui` to exercise `initialize`, `tools/list`, and `tools/call` directly against `/mcp`.
+- Reuse the same Authorization and payloads clients do; useful to reproduce integration issues quickly.
+
 ## 5) Auth, Origin, and Local‑only
 - Enforce bearer token on `/mcp` like our REST endpoints.
 - Validate `Origin` to mitigate DNS rebinding.
@@ -161,6 +174,13 @@ Create one router with `/mcp` handlers and small helpers to keep code tidy.
   ```
 - Verify with `gemini mcp list`, then invoke tools in chat. The CLI discovers tools via `tools/list` and calls them with `tools/call`.
 
+Workspaces (for Shell tool)
+- If you want Gemini’s Shell tool to run local commands/scripts, add a workspace mapping:
+  ```json
+  {"workspaces": {"Memory-MCP": "/home/<you>/Projects/Reusable-MCP/Memory-MCP"}}
+  ```
+- This allows commands like `bash run-tests-and-server.sh` to run within the `Memory-MCP` workspace without absolute paths.
+
 ## 10) Testing Checklist (manual)
 - Initialize: POST /mcp with `initialize` → get result with capabilities and serverInfo.
 - Initialized notification: POST /mcp with `notifications/initialized` → 202.
@@ -168,6 +188,9 @@ Create one router with `/mcp` handlers and small helpers to keep code tidy.
 - Tool calls: each call returns a JSON‑RPC response with `content` and `structuredContent`.
 - Error paths: unknown tool → JSON‑RPC `error`; business error → `isError: true`.
 - Auth: missing/invalid Authorization → 401. Origin check enforced.
+
+Search safety (FTS)
+- Quote user queries for FTS `MATCH` to avoid errors on special tokens, e.g., use `"<query>"`.
 
 ## 11) Common Pitfalls
 - Returning plain JSON without JSON‑RPC envelope.
@@ -179,5 +202,10 @@ Create one router with `/mcp` handlers and small helpers to keep code tidy.
 ## 12) Example: Where to Look in This Repo
 - Minimal working implementation: `Memory-MCP/server/app.py` (`/mcp` handler implements `initialize`, `tools/list`, `tools/call`).
 - REST+UI remain available (`/mem`, `/actions/*`) for human testing alongside MCP.
+
+Dev script pattern
+- See `Memory-MCP/run-tests-and-server.sh` for a restartable test+server runner with:
+  - `--no-tests`, `--clean-home`, `--kill-port`, `--smoke` (healthz + MCP init/list + write/read).
+  - Passes `MEM_LOG_DIR` and enables timestamped logs for easier analysis.
 
 With this pattern you can add MCP to new services by: defining tool schemas, writing a dispatcher in `/mcp`, and bridging to your existing Python functions. Keep security (Origin, auth) on by default.
