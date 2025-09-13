@@ -1,0 +1,14 @@
+version: "3.8"
+services:
+  memory-mcp:
+    build: .
+    image: memory-mcp:dev
+    environment:
+      - MEM_TOKEN=${MEM_TOKEN:-secret}
+    ports:
+      - "7090:7090"
+    volumes:
+      - memdata:/data
+volumes:
+  memdata: {}
+

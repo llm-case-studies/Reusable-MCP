@@ -2,8 +2,9 @@
 
 ## Actions
 - POST /actions/search_code
-  - Request: { query: string, root?: string, globs?: string[], maxResults?: number, contextLines?: number }
+  - Request: { query: string, root?: string, globs?: string[], maxResults?: number, contextLines?: number, literal?: boolean, timeoutMs?: number }
   - Response: { hits: [{ file: string, line: number, preview: string }] }
+  - Notes: `root` must resolve under `default_code_root`; server rejects requests with an external root (`forbidden_root`).
 - GET /sse/search_code_stream?query=…&root=…&maxResults=…
   - Streams text/event-stream; events: {event:"message", data: hit}, terminates with {event:"end", data:{count}}
 - POST /actions/search_logs

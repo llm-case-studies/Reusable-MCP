@@ -10,6 +10,7 @@ try:
     from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
     from pydantic import BaseModel
     import uvicorn
+    import logging
 except Exception:
     print("Missing dependencies: fastapi, uvicorn")
     print("Create a venv and: pip install fastapi uvicorn")
@@ -87,68 +88,153 @@ def _auth_ok(request: Request) -> bool:
 def create_app(home: Path) -> FastAPI:
     app = FastAPI()
     con = init_db(home)
+    # Basic logging (stdout). Control with MEM_LOG_LEVEL (e.g., DEBUG, INFO, WARNING).
+    lvl = os.environ.get('MEM_LOG_LEVEL', 'INFO').upper()
+    logging.basicConfig(level=getattr(logging, lvl, logging.INFO), format='[%(levelname)s] %(message)s')
+    LOG = logging.getLogger('memory-mcp')
+    # Optional file logging (append by default). Controls:
+    #   MEM_LOG_DIR: directory for logs (default none)
+    #   MEM_LOG_FILE: explicit file path (overrides MEM_LOG_DIR)
+    #   MEM_LOG_TS: if set truthy, include timestamp in filename when using MEM_LOG_DIR
+    #   MEM_LOG_ROTATE: if set, enable RotatingFileHandler (bytes,default 5242880). MEM_LOG_BACKUPS (default 5)
+    log_dir = os.environ.get('MEM_LOG_DIR')
+    log_file = os.environ.get('MEM_LOG_FILE')
+    ts_flag = os.environ.get('MEM_LOG_TS', '0') in ('1', 'true', 'TRUE')
+    rotate_bytes = os.environ.get('MEM_LOG_ROTATE')
+    rotate_backups = int(os.environ.get('MEM_LOG_BACKUPS', '5'))
+    try:
+        if log_dir and not log_file:
+            Path(log_dir).mkdir(parents=True, exist_ok=True)
+            if ts_flag:
+                from datetime import datetime
+                ts = datetime.now().strftime('%Y%m%d-%H%M%S')
+                log_file = str(Path(log_dir) / f'app-{ts}.log')
+            else:
+                log_file = str(Path(log_dir) / 'app.log')
+        if log_file:
+            if rotate_bytes:
+                from logging.handlers import RotatingFileHandler
+                max_bytes = int(rotate_bytes) if str(rotate_bytes).isdigit() else 5 * 1024 * 1024
+                fh = RotatingFileHandler(log_file, maxBytes=max_bytes, backupCount=rotate_backups)
+            else:
+                fh = logging.FileHandler(log_file)
+            fh.setLevel(getattr(logging, lvl, logging.INFO))
+            fh.setFormatter(logging.Formatter('[%(levelname)s] %(asctime)s %(message)s'))
+            logging.getLogger().addHandler(fh)
+            LOG.info('File logging enabled at %s', log_file)
+    except Exception as e:
+        LOG.warning('Failed to initialize file logging: %s', e)
     PROTOCOL_VERSION = '2025-06-18'
 
+    def _memory_entry_schema():
+        return {
+            'type': ['object', 'null'],
+            'description': 'Versioned memory entry (null when not found).',
+            'properties': {
+                'id': {'type': 'string', 'description': 'Unique memory id (UUID).'},
+                'version': {'type': 'integer', 'description': 'Monotonic version per project+key.'},
+                'project': {'type': ['string','null'], 'description': 'Project namespace.'},
+                'key': {'type': ['string','null'], 'description': 'Optional memory key (name).'},
+                'scope': {'type': 'string', 'enum': ['project','global'], 'description': 'Scope selection.'},
+                'text': {'type': 'string', 'description': 'Entry body.'},
+                'tags': {'type': 'array', 'items': {'type': 'string'}, 'description': 'Free‑form labels.'},
+                'createdAt': {'type': 'string', 'format': 'date-time', 'description': 'Creation timestamp (ISO8601).'},
+                'ttlSec': {'type': ['integer','null'], 'description': 'Optional time‑to‑live in seconds.'},
+                'metadata': {'type': ['object','null'], 'description': 'Arbitrary JSON metadata.'}
+            },
+            'required': ['id','version','scope','text','tags','createdAt']
+        }
+
     def mcp_tools():
+        entry_schema = _memory_entry_schema()
         return [
             {
                 'name': 'write_memory',
                 'title': 'Write Memory',
-                'description': 'Append a memory entry; increments version when project+key provided.',
+                'description': 'Append a memory; if project+key provided, bump version and store latest.',
                 'inputSchema': {
                     'type': 'object',
                     'properties': {
-                        'project': {'type': ['string','null']},
-                        'scope': {'type': 'string', 'enum': ['project', 'global'], 'default': 'project'},
-                        'key': {'type': ['string','null']},
-                        'text': {'type': 'string'},
-                        'tags': {'type': 'array', 'items': {'type': 'string'}},
-                        'ttlSec': {'type': ['integer','null']},
-                        'metadata': {'type': ['object','null']}
+                        'project': {'type': ['string','null'], 'description': 'Project name (optional).'},
+                        'scope': {'type': 'string', 'enum': ['project', 'global'], 'default': 'project', 'description': 'Scope: project or global.'},
+                        'key': {'type': ['string','null'], 'description': 'Optional key (name) for versioned reads.'},
+                        'text': {'type': 'string', 'description': 'Entry body text.'},
+                        'tags': {'type': 'array', 'items': {'type': 'string'}, 'description': 'Labels, e.g., ["decision","prompt"].'},
+                        'ttlSec': {'type': ['integer','null'], 'minimum': 1, 'description': 'Optional TTL seconds.'},
+                        'metadata': {'type': ['object','null'], 'description': 'Arbitrary JSON metadata.'}
                     },
                     'required': ['text']
+                },
+                'outputSchema': {
+                    'type': 'object',
+                    'properties': {
+                        'entry': entry_schema
+                    },
+                    'required': ['entry']
                 }
             },
             {
                 'name': 'read_memory',
                 'title': 'Read Memory',
-                'description': 'Read by id or latest by project+key.',
+                'description': 'Read by id or latest by project+key; returns null when not found.',
                 'inputSchema': {
                     'type': 'object',
                     'properties': {
-                        'id': {'type': ['string','null']},
-                        'project': {'type': ['string','null']},
-                        'key': {'type': ['string','null']}
-                    }
+                        'id': {'type': ['string','null'], 'description': 'Exact entry id (UUID).'},
+                        'project': {'type': ['string','null'], 'description': 'Project to resolve latest by key.'},
+                        'key': {'type': ['string','null'], 'description': 'Key (name) to resolve latest entry.'}
+                    },
+                    'description': 'Provide either id, or project+key.'
+                },
+                'outputSchema': {
+                    'type': 'object',
+                    'properties': {
+                        'entry': entry_schema
+                    },
+                    'required': ['entry']
                 }
             },
             {
                 'name': 'search_memory',
                 'title': 'Search Memory',
-                'description': 'Full‑text search over memory entries (FTS).',
+                'description': 'Full‑text search (FTS) over saved entries.',
                 'inputSchema': {
                     'type': 'object',
                     'properties': {
-                        'query': {'type': 'string'},
-                        'project': {'type': ['string','null']},
-                        'tags': {'type': 'array', 'items': {'type': 'string'}},
-                        'k': {'type': 'integer', 'default': 20}
+                        'query': {'type': 'string', 'description': 'Search string (FTS query).'},
+                        'project': {'type': ['string','null'], 'description': 'Limit search to a project.'},
+                        'tags': {'type': 'array', 'items': {'type': 'string'}, 'description': 'Filter: entry must include these tags.'},
+                        'k': {'type': 'integer', 'default': 20, 'minimum': 1, 'maximum': 200, 'description': 'Max items to return.'}
                     },
                     'required': ['query']
+                },
+                'outputSchema': {
+                    'type': 'object',
+                    'properties': {
+                        'items': {'type': 'array', 'items': _memory_entry_schema(), 'description': 'Matching entries.'}
+                    },
+                    'required': ['items']
                 }
             },
             {
                 'name': 'list_memories',
                 'title': 'List Memories',
-                'description': 'List recent memory entries with optional filters.',
+                'description': 'List recent entries with optional filters.',
                 'inputSchema': {
                     'type': 'object',
                     'properties': {
-                        'project': {'type': ['string','null']},
-                        'tags': {'type': 'array', 'items': {'type': 'string'}},
-                        'limit': {'type': 'integer', 'default': 50},
-                        'offset': {'type': 'integer', 'default': 0}
+                        'project': {'type': ['string','null'], 'description': 'Limit to a project.'},
+                        'tags': {'type': 'array', 'items': {'type': 'string'}, 'description': 'Filter by tags (contains all).'},
+                        'limit': {'type': 'integer', 'default': 50, 'minimum': 1, 'maximum': 500, 'description': 'Page size.'},
+                        'offset': {'type': 'integer', 'default': 0, 'minimum': 0, 'description': 'Page offset.'}
                     }
+                },
+                'outputSchema': {
+                    'type': 'object',
+                    'properties': {
+                        'items': {'type': 'array', 'items': _memory_entry_schema(), 'description': 'Recent entries.'}
+                    },
+                    'required': ['items']
                 }
             },
         ]
@@ -232,10 +318,41 @@ def create_app(home: Path) -> FastAPI:
             return {'jsonrpc': '2.0', 'id': id_value, 'error': error}
         return {'jsonrpc': '2.0', 'id': id_value, 'result': result}
 
+    def _ensure_rfc3339(dt: Optional[str]) -> Optional[str]:
+        if not isinstance(dt, str) or not dt:
+            return dt
+        # If timezone info is missing, assume UTC and append 'Z'.
+        if 'Z' in dt or '+' in dt or dt.endswith('Z'):
+            return dt
+        return dt + 'Z'
+
+    def _normalize_entry_dict(d: Dict[str, Any]) -> Dict[str, Any]:
+        if not isinstance(d, dict):
+            return d
+        ca = d.get('createdAt')
+        d['createdAt'] = _ensure_rfc3339(ca)
+        # Ensure required shapes
+        if not isinstance(d.get('tags'), list):
+            d['tags'] = [] if d.get('tags') is None else [str(d['tags'])]
+        if 'scope' in d and d['scope'] is None:
+            d['scope'] = 'project'
+        return d
+
+    def _normalize_structured(obj: Any) -> Any:
+        if isinstance(obj, dict):
+            if 'entry' in obj and isinstance(obj['entry'], dict):
+                obj['entry'] = _normalize_entry_dict(obj['entry'])
+            elif 'items' in obj and isinstance(obj['items'], list):
+                obj['items'] = [_normalize_entry_dict(x) for x in obj['items']]
+            else:
+                obj = _normalize_entry_dict(obj)
+        return obj
+
     def _text_and_structured(obj: Any):
+        norm = _normalize_structured(obj)
         return {
-            'content': [{'type': 'text', 'text': json.dumps(obj, ensure_ascii=False)}],
-            'structuredContent': obj,
+            'content': [{'type': 'text', 'text': json.dumps(norm, ensure_ascii=False)}],
+            'structuredContent': norm,
             'isError': False,
         }
 
@@ -277,12 +394,15 @@ def create_app(home: Path) -> FastAPI:
                 return None
 
             if method == 'tools/list':
-                return _mcp_response(msg_id, result={'tools': mcp_tools(), 'nextCursor': None})
+                # Omit nextCursor when there is no pagination token to avoid clients
+                # rejecting `null` (some validate as string if present).
+                return _mcp_response(msg_id, result={'tools': mcp_tools()})
 
             if method == 'tools/call':
                 name = (params or {}).get('name')
                 arguments = (params or {}).get('arguments') or {}
                 try:
+                    LOG.debug("tools/call name=%s args=%s", name, {k: (v if k != 'text' else '…') for k, v in (arguments or {}).items()})
                     if name == 'write_memory':
                         entry = write_memory(
                             con,
@@ -295,7 +415,7 @@ def create_app(home: Path) -> FastAPI:
                             ttl_sec=arguments.get('ttlSec'),
                             metadata=arguments.get('metadata'),
                         )
-                        return _mcp_response(msg_id, result=_text_and_structured(entry.__dict__))
+                        return _mcp_response(msg_id, result=_text_and_structured({'entry': entry.__dict__}))
                     elif name == 'read_memory':
                         entry = read_memory(
                             con,
@@ -325,7 +445,16 @@ def create_app(home: Path) -> FastAPI:
                     else:
                         return _mcp_response(msg_id, error={'code': -32602, 'message': f'Unknown tool: {name}'})
                 except Exception as e:
-                    return _mcp_response(msg_id, result={'content': [{'type': 'text', 'text': f'Error: {e}'}], 'isError': True})
+                    LOG.exception("tools/call failed: %s", e)
+                    # Tool-level error payload with diagnostics (when MEM_DEBUG enabled)
+                    debug = os.environ.get('MEM_DEBUG', '0') in ('1','true','TRUE')
+                    diag = {'error': {'message': str(e)}}
+                    if debug:
+                        diag['error']['type'] = e.__class__.__name__
+                    return _mcp_response(
+                        msg_id,
+                        result={'content': [{'type': 'text', 'text': f'Error: {e}'}], 'structuredContent': diag, 'isError': True},
+                    )
 
             if method == 'ping':
                 return _mcp_response(msg_id, result={'ok': True})
@@ -415,6 +544,86 @@ def create_app(home: Path) -> FastAPI:
               };
               const r = await fetch('/actions/search_memory', {method:'POST', headers: headers(), body: JSON.stringify(body)});
               document.getElementById('searchOut').textContent = j(await r.json());
+            }
+          </script>
+        </body>
+        </html>
+        '''
+        return HTMLResponse(content=html)
+
+    @app.get('/mcp_ui')
+    async def mcp_ui():
+        html = '''
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Memory-MCP (MCP UI)</title>
+          <style>
+            body { font-family: system-ui, sans-serif; background: #0b1220; color: #e0e6f0; padding: 20px; }
+            section { background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+            label { display: block; margin: 6px 0; }
+            input, textarea { width: 100%; background: #0b1220; color: #e0e6f0; border: 1px solid #374151; border-radius: 6px; padding: 8px; }
+            button { background: #2563eb; color: white; border: 0; border-radius: 6px; padding: 8px 12px; cursor: pointer; margin-right: 6px; }
+            pre { background: #0b1220; border: 1px solid #1f2937; border-radius: 8px; padding: 10px; max-height: 50vh; overflow: auto; }
+            small { color: #94a3b8; }
+          </style>
+        </head>
+        <body>
+          <h1>Memory‑MCP — Streamable HTTP UI</h1>
+          <small>Authorization uses MEM_TOKEN from localStorage if set.</small>
+          <section>
+            <h2>Initialize</h2>
+            <label>Protocol <input id="proto" value="2025-06-18"/></label>
+            <button onclick="initMcp()">initialize</button>
+            <pre id="initOut">(not initialized)</pre>
+          </section>
+          <section>
+            <h2>Tools</h2>
+            <button onclick="listTools()">tools/list</button>
+            <pre id="toolsOut">(no tools)
+            </pre>
+          </section>
+          <section>
+            <h2>Call Tool</h2>
+            <label>Tool name <input id="tname" value="write_memory"/></label>
+            <label>Arguments (JSON)
+              <textarea id="targs" rows="6">{
+  "project": "RoadNerd",
+  "scope": "project",
+  "key": "policy",
+  "text": "Example text from MCP UI",
+  "tags": ["ui"]
+}</textarea></label>
+            <button onclick="callTool()">tools/call</button>
+            <pre id="callOut">(no call)</pre>
+          </section>
+          <script>
+            function headers(){
+              const t = localStorage.getItem('MEM_TOKEN') || '';
+              const h = {'Content-Type':'application/json','Accept':'application/json'};
+              if (t) h['Authorization'] = 'Bearer '+t;
+              return h;
+            }
+            function j(o){try{return JSON.stringify(o,null,2);}catch(e){return String(o);} }
+            async function initMcp(){
+              const p = document.getElementById('proto').value || '2025-06-18';
+              const body = { jsonrpc:'2.0', id:1, method:'initialize', params:{ protocolVersion:p, capabilities:{}, clientInfo:{ name:'mcp-ui', version:'1' } } };
+              const r = await fetch('/mcp', { method:'POST', headers: headers(), body: JSON.stringify(body) });
+              document.getElementById('initOut').textContent = j(await r.json());
+            }
+            async function listTools(){
+              const body = [{ jsonrpc:'2.0', id:1, method:'initialize', params:{ protocolVersion:'2025-06-18', capabilities:{}, clientInfo:{ name:'mcp-ui', version:'1' } } },
+                            { jsonrpc:'2.0', id:2, method:'tools/list' }];
+              const r = await fetch('/mcp', { method:'POST', headers: headers(), body: JSON.stringify(body) });
+              document.getElementById('toolsOut').textContent = j(await r.json());
+            }
+            async function callTool(){
+              let args = {};
+              try { args = JSON.parse(document.getElementById('targs').value || '{}'); } catch(e){ alert('Invalid JSON for arguments'); return; }
+              const name = document.getElementById('tname').value || '';
+              const body = { jsonrpc:'2.0', id:3, method:'tools/call', params:{ name, arguments: args } };
+              const r = await fetch('/mcp', { method:'POST', headers: headers(), body: JSON.stringify(body) });
+              document.getElementById('callOut').textContent = j(await r.json());
             }
           </script>
         </body>

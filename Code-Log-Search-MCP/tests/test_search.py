@@ -20,6 +20,10 @@ def test_perform_code_search(tmp_path: Path):
     assert len(hits) >= 1
     assert any("num_predict" in h.preview for h in hits)
 
+    # Fixed-string (literal) mode should also work
+    hits_lit = perform_code_search("num_predict", root, max_results=5, context_lines=0, literal=True)
+    assert len(hits_lit) >= 1
+
 
 def test_perform_logs_search(tmp_path: Path):
     logs = tmp_path / "logs"

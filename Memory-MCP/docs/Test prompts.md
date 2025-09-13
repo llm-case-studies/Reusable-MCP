@@ -1,0 +1,2 @@
+Could you please help test memory-mcp that is available to you? Which tools does it have? What are they for? Please test those tools with a test data of your            │
+│   choice. keep me in a loop how it goes and at the end provide a summary with details.  

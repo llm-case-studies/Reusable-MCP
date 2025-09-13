@@ -1,0 +1,104 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.roadnerd_venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Runtime
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage
+.coverage
+.nyc_output
+coverage/
+
+# Config overrides
+config.local.json
+config.production.json
+.env.local
+.env.production
+
+# SSH keys (if any accidentally copied)
+*.pem
+*.key
+id_*
+!*.pub
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# Model files (large)
+*.gguf
+*.bin
+models/
+
+# Runtime state
+.roadnerd/
+
+# Local MCP/Gemini config
+.gemini/
+
+# Local temp DBs / runtime sqlite
+.tmp_memdb/
+
+# Service logs
+Code-Log-Search-MCP/logs/
+Memory-MCP/logs/
+Prior-Self-MCP/logs/
+roadnerd.state

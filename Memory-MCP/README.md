@@ -7,7 +7,7 @@ A small, reusable HTTP/SSE MCP service that provides durable, project‑scoped m
 - Actions: write_memory, read_memory, search_memory, list_memories; optional SSE stream for long searches
 - License: MIT
 
-See docs/QUICKSTART.md and docs/SPEC.md for details.
+See docs/QUICKSTART.md, docs/MCP-QUICKSTART.md and docs/SPEC.md for details.
 
 ## Data Model (Quick Reference)
 - A memory is a versioned entry, not a plain KV:
@@ -36,6 +36,20 @@ See docs/QUICKSTART.md and docs/SPEC.md for details.
   }
   ```
   Then run `gemini mcp list` and use the tools in chat.
+  - Optionally add a workspace so Gemini’s Shell can run local commands/scripts without absolute paths:
+    ```json
+    {"workspaces": {"Memory-MCP": "/home/<you>/Projects/Reusable-MCP/Memory-MCP"}}
+    ```
+
+## Packaging
+- Installable package via `pyproject.toml` with console scripts:
+  - `memory-mcp` (runs the server)
+  - `memory-mcp-serve` (alias)
+
+## Docker
+- Build: `docker build -t memory-mcp:dev ./Memory-MCP`
+- Run: `docker run --rm -e MEM_TOKEN=secret -p 7090:7090 memory-mcp:dev`
+- Compose: `docker compose -f Memory-MCP/docker-compose.yml up --build`
 
 ## Examples
 - Write (keyed):
@@ -56,3 +70,21 @@ See docs/QUICKSTART.md and docs/SPEC.md for details.
     -H 'Content-Type: application/json' \
     -d '{"query":"tokens","project":"RoadNerd","k":5}'
   ```
+
+## Dev script (tests + server + smoke)
+- Script: `run-tests-and-server.sh`
+- Flags:
+  - `--no-tests` skip pytest
+  - `--clean-home` remove `$MEM_HOME` before starting
+  - `--kill-port` free the `--port` if occupied (uses `fuser`/`lsof` when available)
+  - `--smoke` start in background, run health check + MCP initialize/tools.list + write/read, then restart in foreground
+- Host/port are passed through (e.g., `--host 127.0.0.1 --port 7090`).
+- Examples:
+  - `./run-tests-and-server.sh --kill-port --clean-home --smoke --host 127.0.0.1 --port 7090`
+  - `MEM_LOG_LEVEL=DEBUG MEM_DEBUG=1 ./run-tests-and-server.sh --no-tests --smoke`
+
+## Logging & Troubleshooting
+- Logging to repo: set `MEM_LOG_DIR=Memory-MCP/logs` (the dev script does this automatically) — logs append by default.
+- Add `MEM_LOG_TS=1` to create timestamped files; add `MEM_LOG_ROTATE=<bytes>` and `MEM_LOG_BACKUPS=<n>` for rotation.
+- MCP Test UI: `GET /mcp_ui` exercises `initialize`, `tools/list`, and `tools/call` directly against `/mcp` (mirrors Gemini’s usage), including Bearer auth via `localStorage`.
+- FTS search safety: user queries are quoted for FTS `MATCH` to avoid SQLite parse errors on special tokens.

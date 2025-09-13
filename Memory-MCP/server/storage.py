@@ -3,7 +3,7 @@ import json
 import sqlite3
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Any
 
@@ -86,7 +86,8 @@ def write_memory(con: sqlite3.Connection, home: Path, *, project: Optional[str],
             version = int(row[0]) + 1
 
     mid = str(uuid.uuid4())
-    now = datetime.now().isoformat()
+    # RFC3339 compliant timestamp with timezone
+    now = datetime.now(timezone.utc).isoformat()
     tags_str = ','.join(tags) if tags else ''
     md_json = json.dumps(metadata) if metadata else None
 
@@ -137,8 +138,10 @@ def read_memory(con: sqlite3.Connection, *, id: Optional[str] = None, project: O
 
 def search_memory(con: sqlite3.Connection, *, query: str, project: Optional[str] = None, tags: Optional[List[str]] = None, k: int = 20) -> List[MemoryEntry]:
     # Use FTS MATCH; if project/tags filters present, intersect
-    # note: simplistic MATCH string; escape problematic chars by quoting
-    q = query.replace('"', ' ')
+    # To avoid parse errors like "no such column: ..." when users pass special tokens,
+    # treat the input as a single phrase by quoting it for FTS5.
+    q = (query or '').replace('"', ' ')
+    q = f'"{q.strip()}"' if q.strip() else '""'
     sql = "SELECT m.* FROM fts_memories f JOIN memories m ON f.rowid = m.rowid WHERE f.text MATCH ?"
     args: List[Any] = [q]
     if project is not None:
@@ -171,4 +174,3 @@ def list_memories(con: sqlite3.Connection, *, project: Optional[str] = None, tag
     args.extend([limit, offset])
     cur = con.execute(sql, args)
     return [_to_entry(row) for row in cur.fetchall()]
-

@@ -6,9 +6,23 @@
 - `pip install fastapi uvicorn pytest`
 
 ## Run the server
+Option A: Dev script (edit defaults, then run)
+The script has a config block at the top. Defaults:
+- `HOST=127.0.0.1`, `PORT=7080`
+- `CODE_ROOT` defaults to the repository root
+- `LOGS_ROOT` defaults to `Code-Log-Search-MCP/logs`
+- Flags: `NO_TESTS=0`, `KILL_PORT=1`, `SMOKE=1`
+You can also create `Code-Log-Search-MCP/.env` to override, or pass CLI flags.
+
+```
+./run-tests-and-server.sh         # runs tests + smoke + serve with defaults
+./run-tests-and-server.sh --help  # show flags and config info
+```
+
+Option B: Direct
 ```
 python3 server/app.py --host 127.0.0.1 --port 7080 \
-  --default-code-root /home/alex/Projects/iHomeNerd \
+  --default-code-root "$PWD" \
   --logs-root "$HOME/.roadnerd/logs"
 ```
 
