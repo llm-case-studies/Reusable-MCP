@@ -2,9 +2,17 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
-APP="python3 \"$ROOT_DIR/server/app.py\""
+VENV_PY="$ROOT_DIR/.mcp-venv/bin/python"
+if [ -x "$VENV_PY" ]; then
+  PY_EXE="$VENV_PY"
+else
+  PY_EXE="python3"
+fi
+APP="$PY_EXE -m server.app"
 HOME_DIR_DEFAULT="$HOME/.roadnerd/memorydb"
 MEM_HOME="${MEM_HOME:-$HOME_DIR_DEFAULT}"
+LOG_DIR="$ROOT_DIR/logs"
+LOG_DIR="$ROOT_DIR/logs"
 
 NO_TESTS=0
 CLEAN_HOME=0
@@ -31,8 +39,10 @@ while (("$#")); do
 done
 
 BASE_URL="http://$HOST:$PORT"
+mkdir -p "$LOG_DIR"
 
 echo "== Memory-MCP: settings =="
+echo "  PY_EXE=$PY_EXE ($(command -v "$PY_EXE" || echo not-found))"
 echo "  MEM_HOME=$MEM_HOME"
 echo "  HOST=$HOST PORT=$PORT"
 echo "  flags: no-tests=$NO_TESTS clean-home=$CLEAN_HOME kill-port=$KILL_PORT smoke=$SMOKE"
@@ -44,10 +54,17 @@ fi
 
 if (( ! NO_TESTS )); then
   echo "== Running unit/integration tests (pytest) =="
-  if command -v pytest >/dev/null 2>&1; then
+  if "$PY_EXE" - <<'PY' 2>/dev/null
+import sys
+import importlib
+sys.exit(0 if importlib.util.find_spec('pytest') else 1)
+PY
+  then
+    "$PY_EXE" -m pytest -q "$ROOT_DIR/tests" || { echo "Tests failed" >&2; exit 1; }
+  elif command -v pytest >/dev/null 2>&1; then
     pytest -q "$ROOT_DIR/tests" || { echo "Tests failed" >&2; exit 1; }
   else
-    echo "pytest not found; skipping tests. Run: pip install pytest"
+    echo "pytest not found; skipping tests. Run: pip install pytest (or use .mcp-venv)"
   fi
 else
   echo "== Skipping tests (--no-tests) =="
@@ -68,12 +85,14 @@ fi
 if (( SMOKE )); then
   echo "== Starting server in background for smoke checks =="
   # shellcheck disable=SC2086
-  bash -lc "$APP --home \"$MEM_HOME\" ${ARGS[*]}" >/tmp/memory-mcp.out 2>&1 &
+  TS=$(date +%Y%m%d-%H%M%S)
+  MEM_LOG_DIR="$LOG_DIR" MEM_LOG_LEVEL="${MEM_LOG_LEVEL:-INFO}" MEM_DEBUG="${MEM_DEBUG:-0}" MEM_LOG_TS=1 \
+    bash -lc "cd \"$ROOT_DIR\" && $APP --home \"$MEM_HOME\" ${ARGS[*]}" >"$LOG_DIR/server-bg-$TS.out" 2>&1 &
   BG_PID=$!
   trap 'kill $BG_PID 2>/dev/null || true' EXIT
 
   echo "== Waiting for /healthz =="
-  for i in {1..30}; do
+  for i in $(seq 1 40); do
     if curl -fsS "$BASE_URL/healthz" >/dev/null 2>&1; then
       echo "  healthz OK"; break
     fi
@@ -93,7 +112,7 @@ JSON
   if echo "$MCP_DISC" | grep -q '"tools"'; then
     echo "  tools/list OK"
   else
-    echo "  tools/list FAILED"; echo "$MCP_DISC"; exit 1
+    echo "  tools/list FAILED"; echo "$MCP_DISC"; echo "--- server logs ---"; tail -n 200 "$LOG_DIR/server-bg.out" || true; exit 1
   fi
 
   echo "== MCP: write/read smoke =="
@@ -112,7 +131,7 @@ JSON
   if echo "$READ" | grep -q '"text":"hello from smoke"'; then
     echo "  read_memory OK"
   else
-    echo "  read_memory FAILED"; echo "$READ"; exit 1
+    echo "  read_memory FAILED"; echo "$READ"; echo "--- server logs ---"; tail -n 200 "$LOG_DIR/server-bg.out" || true; exit 1
   fi
 
   echo "== Smoke checks passed =="
@@ -123,4 +142,5 @@ fi
 
 echo "== Starting Memory-MCP server (Ctrl+C to stop) =="
 # shellcheck disable=SC2086
-exec bash -lc "$APP --home \"$MEM_HOME\" ${ARGS[*]}"
+exec env MEM_LOG_DIR="$LOG_DIR" MEM_LOG_LEVEL="${MEM_LOG_LEVEL:-INFO}" MEM_DEBUG="${MEM_DEBUG:-0}" MEM_LOG_TS=1 \
+  bash -lc "cd \"$ROOT_DIR\" && $APP --home \"$MEM_HOME\" ${ARGS[*]}"

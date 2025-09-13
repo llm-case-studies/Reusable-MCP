@@ -19,3 +19,16 @@ A small, reusable MCP tool server that gives agents access to prior chat context
 - docs/ — WHITEPAPER, SPEC, QUICKSTART
 
 See docs/QUICKSTART.md to ingest, index, and run the server.
+
+## Auth
+- Optional bearer token via `PRIOR_TOKEN` (or `PRIOR_SELF_TOKEN`). If set, all endpoints (including `/mcp`) require `Authorization: Bearer <token>`.
+
+## Logging
+- Control via env:
+  - `PRIOR_LOG_LEVEL=INFO|DEBUG|...`
+  - `PRIOR_LOG_DIR=<dir>` or `PRIOR_LOG_FILE=<file>` (with optional `PRIOR_LOG_TS=1`)
+  - Rotation: `PRIOR_LOG_ROTATE=<bytes>`, `PRIOR_LOG_BACKUPS=<n>`
+
+## Dev test pages
+- Swagger: `http://127.0.0.1:7070/docs` (and `/redoc`) for REST actions
+- MCP UI: `http://127.0.0.1:7070/mcp_ui` (initialize, tools/list, tools/call)

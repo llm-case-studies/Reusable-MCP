@@ -7,7 +7,7 @@ A small, reusable HTTP/SSE MCP service that provides durable, project‑scoped m
 - Actions: write_memory, read_memory, search_memory, list_memories; optional SSE stream for long searches
 - License: MIT
 
-See docs/QUICKSTART.md and docs/SPEC.md for details.
+See docs/QUICKSTART.md, docs/MCP-QUICKSTART.md and docs/SPEC.md for details.
 
 ## Data Model (Quick Reference)
 - A memory is a versioned entry, not a plain KV:
@@ -40,6 +40,16 @@ See docs/QUICKSTART.md and docs/SPEC.md for details.
     ```json
     {"workspaces": {"Memory-MCP": "/home/<you>/Projects/Reusable-MCP/Memory-MCP"}}
     ```
+
+## Packaging
+- Installable package via `pyproject.toml` with console scripts:
+  - `memory-mcp` (runs the server)
+  - `memory-mcp-serve` (alias)
+
+## Docker
+- Build: `docker build -t memory-mcp:dev ./Memory-MCP`
+- Run: `docker run --rm -e MEM_TOKEN=secret -p 7090:7090 memory-mcp:dev`
+- Compose: `docker compose -f Memory-MCP/docker-compose.yml up --build`
 
 ## Examples
 - Write (keyed):

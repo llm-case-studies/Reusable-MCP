@@ -1,0 +1,60 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest"
+      ]
+    },
+    "memory-mcp": {
+      "httpUrl": "http://127.0.0.1:7090/mcp",
+      "timeout": 15000,
+      "headers": {
+        "Authorization": "Bearer ${MEM_TOKEN}"
+      },
+      "description": "Reusable-MCP Memory server (streamable HTTP)"
+    },
+    "code-log-search": {
+      "httpUrl": "http://127.0.0.1:7080/mcp",
+      "timeout": 15000,
+      "headers": {
+        "Authorization": "Bearer ${CLS_TOKEN}"
+      },
+      "description": "Reusable-MCP Code+Log Search server (streamable HTTP)"
+    },
+    "prior-self": {
+      "httpUrl": "http://127.0.0.1:7070/mcp",
+      "timeout": 15000,
+      "headers": {
+        "Authorization": "Bearer ${PRIOR_TOKEN}"
+      },
+      "description": "Reusable-MCP Prior-Self server (previous chat context)"
+    },
+    "context7": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp",
+        "--api-key",
+        "ctx7sk-8bcd738f-bd98-4be1-afa2-83f7efe51171"
+      ]
+    },
+    "brave-search": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@brave/brave-search-mcp-server",
+        "--transport",
+        "stdio"
+      ],
+      "env": {
+        "BRAVE_API_KEY": "BSAmP-auJfqbQrbDaEiiON6YohhlBh7"
+      }
+    }
+  },
+  "workspaces": {
+    "Memory-MCP": "/home/alex/Projects/Reusable-MCP/Memory-MCP",
+    "Code-Log-Search-MCP": "/home/alex/Projects/Reusable-MCP/Code-Log-Search-MCP",
+    "Prior-Self-MCP": "/home/alex/Projects/Reusable-MCP/Prior-Self-MCP"
+  }
+}

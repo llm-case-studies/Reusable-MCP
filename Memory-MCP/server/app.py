@@ -92,6 +92,38 @@ def create_app(home: Path) -> FastAPI:
     lvl = os.environ.get('MEM_LOG_LEVEL', 'INFO').upper()
     logging.basicConfig(level=getattr(logging, lvl, logging.INFO), format='[%(levelname)s] %(message)s')
     LOG = logging.getLogger('memory-mcp')
+    # Optional file logging (append by default). Controls:
+    #   MEM_LOG_DIR: directory for logs (default none)
+    #   MEM_LOG_FILE: explicit file path (overrides MEM_LOG_DIR)
+    #   MEM_LOG_TS: if set truthy, include timestamp in filename when using MEM_LOG_DIR
+    #   MEM_LOG_ROTATE: if set, enable RotatingFileHandler (bytes,default 5242880). MEM_LOG_BACKUPS (default 5)
+    log_dir = os.environ.get('MEM_LOG_DIR')
+    log_file = os.environ.get('MEM_LOG_FILE')
+    ts_flag = os.environ.get('MEM_LOG_TS', '0') in ('1', 'true', 'TRUE')
+    rotate_bytes = os.environ.get('MEM_LOG_ROTATE')
+    rotate_backups = int(os.environ.get('MEM_LOG_BACKUPS', '5'))
+    try:
+        if log_dir and not log_file:
+            Path(log_dir).mkdir(parents=True, exist_ok=True)
+            if ts_flag:
+                from datetime import datetime
+                ts = datetime.now().strftime('%Y%m%d-%H%M%S')
+                log_file = str(Path(log_dir) / f'app-{ts}.log')
+            else:
+                log_file = str(Path(log_dir) / 'app.log')
+        if log_file:
+            if rotate_bytes:
+                from logging.handlers import RotatingFileHandler
+                max_bytes = int(rotate_bytes) if str(rotate_bytes).isdigit() else 5 * 1024 * 1024
+                fh = RotatingFileHandler(log_file, maxBytes=max_bytes, backupCount=rotate_backups)
+            else:
+                fh = logging.FileHandler(log_file)
+            fh.setLevel(getattr(logging, lvl, logging.INFO))
+            fh.setFormatter(logging.Formatter('[%(levelname)s] %(asctime)s %(message)s'))
+            logging.getLogger().addHandler(fh)
+            LOG.info('File logging enabled at %s', log_file)
+    except Exception as e:
+        LOG.warning('Failed to initialize file logging: %s', e)
     PROTOCOL_VERSION = '2025-06-18'
 
     def _memory_entry_schema():
@@ -512,6 +544,86 @@ def create_app(home: Path) -> FastAPI:
               };
               const r = await fetch('/actions/search_memory', {method:'POST', headers: headers(), body: JSON.stringify(body)});
               document.getElementById('searchOut').textContent = j(await r.json());
+            }
+          </script>
+        </body>
+        </html>
+        '''
+        return HTMLResponse(content=html)
+
+    @app.get('/mcp_ui')
+    async def mcp_ui():
+        html = '''
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Memory-MCP (MCP UI)</title>
+          <style>
+            body { font-family: system-ui, sans-serif; background: #0b1220; color: #e0e6f0; padding: 20px; }
+            section { background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+            label { display: block; margin: 6px 0; }
+            input, textarea { width: 100%; background: #0b1220; color: #e0e6f0; border: 1px solid #374151; border-radius: 6px; padding: 8px; }
+            button { background: #2563eb; color: white; border: 0; border-radius: 6px; padding: 8px 12px; cursor: pointer; margin-right: 6px; }
+            pre { background: #0b1220; border: 1px solid #1f2937; border-radius: 8px; padding: 10px; max-height: 50vh; overflow: auto; }
+            small { color: #94a3b8; }
+          </style>
+        </head>
+        <body>
+          <h1>Memory‑MCP — Streamable HTTP UI</h1>
+          <small>Authorization uses MEM_TOKEN from localStorage if set.</small>
+          <section>
+            <h2>Initialize</h2>
+            <label>Protocol <input id="proto" value="2025-06-18"/></label>
+            <button onclick="initMcp()">initialize</button>
+            <pre id="initOut">(not initialized)</pre>
+          </section>
+          <section>
+            <h2>Tools</h2>
+            <button onclick="listTools()">tools/list</button>
+            <pre id="toolsOut">(no tools)
+            </pre>
+          </section>
+          <section>
+            <h2>Call Tool</h2>
+            <label>Tool name <input id="tname" value="write_memory"/></label>
+            <label>Arguments (JSON)
+              <textarea id="targs" rows="6">{
+  "project": "RoadNerd",
+  "scope": "project",
+  "key": "policy",
+  "text": "Example text from MCP UI",
+  "tags": ["ui"]
+}</textarea></label>
+            <button onclick="callTool()">tools/call</button>
+            <pre id="callOut">(no call)</pre>
+          </section>
+          <script>
+            function headers(){
+              const t = localStorage.getItem('MEM_TOKEN') || '';
+              const h = {'Content-Type':'application/json','Accept':'application/json'};
+              if (t) h['Authorization'] = 'Bearer '+t;
+              return h;
+            }
+            function j(o){try{return JSON.stringify(o,null,2);}catch(e){return String(o);} }
+            async function initMcp(){
+              const p = document.getElementById('proto').value || '2025-06-18';
+              const body = { jsonrpc:'2.0', id:1, method:'initialize', params:{ protocolVersion:p, capabilities:{}, clientInfo:{ name:'mcp-ui', version:'1' } } };
+              const r = await fetch('/mcp', { method:'POST', headers: headers(), body: JSON.stringify(body) });
+              document.getElementById('initOut').textContent = j(await r.json());
+            }
+            async function listTools(){
+              const body = [{ jsonrpc:'2.0', id:1, method:'initialize', params:{ protocolVersion:'2025-06-18', capabilities:{}, clientInfo:{ name:'mcp-ui', version:'1' } } },
+                            { jsonrpc:'2.0', id:2, method:'tools/list' }];
+              const r = await fetch('/mcp', { method:'POST', headers: headers(), body: JSON.stringify(body) });
+              document.getElementById('toolsOut').textContent = j(await r.json());
+            }
+            async function callTool(){
+              let args = {};
+              try { args = JSON.parse(document.getElementById('targs').value || '{}'); } catch(e){ alert('Invalid JSON for arguments'); return; }
+              const name = document.getElementById('tname').value || '';
+              const body = { jsonrpc:'2.0', id:3, method:'tools/call', params:{ name, arguments: args } };
+              const r = await fetch('/mcp', { method:'POST', headers: headers(), body: JSON.stringify(body) });
+              document.getElementById('callOut').textContent = j(await r.json());
             }
           </script>
         </body>

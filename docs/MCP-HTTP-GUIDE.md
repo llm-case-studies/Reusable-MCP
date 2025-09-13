@@ -140,6 +140,14 @@ Mini MCP test UI
 - Provide a small HTML UI at `/mcp_ui` to exercise `initialize`, `tools/list`, and `tools/call` directly against `/mcp`.
 - Reuse the same Authorization and payloads clients do; useful to reproduce integration issues quickly.
 
+Standard dev test pages
+- FastAPI docs: `/docs` and `/redoc` (auto-exposed by FastAPI) for REST actions (`/actions/*`).
+- MCP UI: `/mcp_ui` (HTML playground) for JSON‑RPC flows (initialize, list, call).
+- Service-specific sanity pages:
+  - Memory‑MCP: `/mem` for writing/searching memories interactively; `/sse/stream_search_memory` for SSE.
+  - Code‑Log‑Search‑MCP: `/search` for code/log search UI; `/sse/search_code_stream` for SSE.
+  - Prior‑Self‑MCP: lightweight HTTP actions only; use `/mcp_ui` and `/docs`.
+
 ## 5) Auth, Origin, and Local‑only
 - Enforce bearer token on `/mcp` like our REST endpoints.
 - Validate `Origin` to mitigate DNS rebinding.
