@@ -90,4 +90,15 @@ models/
 
 # Runtime state
 .roadnerd/
+
+# Local MCP/Gemini config
+.gemini/
+
+# Local temp DBs / runtime sqlite
+.tmp_memdb/
+
+# Service logs
+Code-Log-Search-MCP/logs/
+Memory-MCP/logs/
+Prior-Self-MCP/logs/
 roadnerd.state
