@@ -1,0 +1,13 @@
+[Unit]
+Description=Test-Start-MCP (Scaffold)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/env python3 %h/Projects/Reusable-MCP/Test-Start-MCP/server/app.py
+Restart=on-failure
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target
+

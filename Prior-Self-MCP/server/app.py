@@ -82,12 +82,17 @@ def create_app(home: Path) -> FastAPI:
         query = body.get('query') or ''
         project = body.get('project')
         k = int(body.get('k', 10))
-        sql = "SELECT chat_id, ts, substr(text,1,200) as excerpt FROM messages WHERE fts_messages MATCH ?"
+        # Use FTS table join to search text content
+        sql = (
+            "SELECT m.chat_id, m.ts, substr(m.text,1,200) as excerpt "
+            "FROM fts_messages f JOIN messages m ON f.rowid = m.id "
+            "WHERE f MATCH ?"
+        )
         args: List[str] = [query]
         if project:
-            sql = sql + " AND project = ?"  # simple filter
+            sql += " AND m.project = ?"
             args.append(project)
-        sql += " ORDER BY ts DESC LIMIT ?"
+        sql += " ORDER BY m.ts DESC LIMIT ?"
         args.append(str(k))
         cur = con.execute(sql, args)
         items = [dict(row) for row in cur.fetchall()]

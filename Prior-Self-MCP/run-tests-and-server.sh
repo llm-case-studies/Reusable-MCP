@@ -24,6 +24,7 @@ DEFAULT_NO_TESTS="${NO_TESTS:-0}"
 DEFAULT_KILL_PORT="${KILL_PORT:-1}"
 DEFAULT_SMOKE="${SMOKE:-1}"
 DEFAULT_PRIOR_TOKEN="${PRIOR_TOKEN:-}"
+LOG_DIR="$ROOT_DIR/logs"
 
 if [ -f "$ROOT_DIR/.env" ]; then
   # shellcheck disable=SC1090
@@ -87,8 +88,10 @@ echo "  PY_EXE=$PY_EXE ($(command -v "$PY_EXE" || echo not-found))"
 echo "  HOME=$HOME_DIR"
 echo "  HOST=$HOST PORT=$PORT"
 echo "  flags: no-tests=$NO_TESTS kill-port=$KILL_PORT smoke=$SMOKE"
+echo "  logs: $LOG_DIR (set PRIOR_LOG_DIR to change)"
 
 mkdir -p "$HOME_DIR/transcripts"
+mkdir -p "$LOG_DIR"
 
 if (( ! NO_TESTS )); then
   echo "== Running tests (pytest) =="
@@ -124,7 +127,8 @@ if (( SMOKE )); then
 
   echo "== Starting server in background for smoke checks =="
   TS=$(date +%Y%m%d-%H%M%S)
-  bash -lc "cd \"$ROOT_DIR\" && $APP --home \"$HOME_DIR\" --host \"$HOST\" --port \"$PORT\"" >"$ROOT_DIR/server-bg-$TS.out" 2>&1 &
+  PRIOR_LOG_DIR="$LOG_DIR" PRIOR_LOG_LEVEL="${PRIOR_LOG_LEVEL:-INFO}" PRIOR_LOG_TS=1 \
+    bash -lc "cd \"$ROOT_DIR\" && $APP --home \"$HOME_DIR\" --host \"$HOST\" --port \"$PORT\"" >"$ROOT_DIR/server-bg-$TS.out" 2>&1 &
   BG_PID=$!
   trap 'kill $BG_PID 2>/dev/null || true' EXIT
 
@@ -163,5 +167,5 @@ JSON
 fi
 
 echo "== Starting Prior-Self-MCP server (Ctrl+C to stop) =="
-exec bash -lc "cd \"$ROOT_DIR\" && $APP --home \"$HOME_DIR\" --host \"$HOST\" --port \"$PORT\""
-
+exec env PRIOR_LOG_DIR="$LOG_DIR" PRIOR_LOG_LEVEL="${PRIOR_LOG_LEVEL:-INFO}" PRIOR_LOG_TS=1 \
+  bash -lc "cd \"$ROOT_DIR\" && $APP --home \"$HOME_DIR\" --host \"$HOST\" --port \"$PORT\""

@@ -1,0 +1,12 @@
+[INFO] File logging enabled at /home/alex/Projects/Reusable-MCP/Prior-Self-MCP/logs/app-20250913-174457.log
+INFO:     Started server process [932767]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:7070 (Press CTRL+C to quit)
+INFO:     127.0.0.1:50876 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50880 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50888 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [932767]

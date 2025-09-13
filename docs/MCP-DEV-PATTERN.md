@@ -59,6 +59,7 @@ Service‑specific notes
 - Memory‑MCP: console script `memory-mcp` available when package installed into your venv.
 - Code‑Log‑Search‑MCP: requires the `ripgrep` binary at `/usr/bin/rg`.
 - Prior‑Self‑MCP: build the index first via `Prior-Self-MCP/indexer/build_index.py`.
+- Test‑Start‑MCP (scaffold): new service to run allowlisted dev scripts (e.g., runners) under strict policy when models’ sandboxes can’t execute scripts.
 
 Gemini CLI
 - Repo config: `.gemini/settings.json` includes HTTP URLs for all servers and workspace mappings.
@@ -70,4 +71,4 @@ Quick commands (shared venv)
 - Memory: `MEM_TOKEN=secret memory-mcp --home ~/.roadnerd/memorydb --host 127.0.0.1 --port 7090`
 - Code‑Log‑Search: `./Code-Log-Search-MCP/run-tests-and-server.sh --kill-port --smoke --host 127.0.0.1 --port 7080 --default-code-root "$PWD" --logs-root "$HOME/.roadnerd/logs"`
 - Prior‑Self: `python3 Prior-Self-MCP/server/app.py --home "$HOME/.roadnerd/chatdb" --host 127.0.0.1 --port 7070`
-
+- Test‑Start: scaffold only; see `Test-Start-MCP/docs/SPEC.md` for upcoming APIs.
