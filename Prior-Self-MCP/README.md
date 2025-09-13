@@ -20,6 +20,16 @@ A small, reusable MCP tool server that gives agents access to prior chat context
 
 See docs/QUICKSTART.md to ingest, index, and run the server.
 
+MCP
+- Streamable HTTP endpoint at `POST /mcp` with tools: search_previous_chats, get_chat_context, list_sessions, summarize_decisions.
+- See docs/MCP-QUICKSTART.md for curl examples.
+
+Dev runner
+- `./run-tests-and-server.sh` — runs tests, seeds transcripts, builds index, smoke tests MCP, then serves (edit defaults or use `.env`).
+
+UI smoke (Playwright)
+- See docs/PLAYWRIGHT-SMOKE.md for a minimal UI smoke that drives `/mcp_ui` and verifies calls.
+
 ## Auth
 - Optional bearer token via `PRIOR_TOKEN` (or `PRIOR_SELF_TOKEN`). If set, all endpoints (including `/mcp`) require `Authorization: Bearer <token>`.
 
