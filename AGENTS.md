@@ -8,15 +8,16 @@
 - Runtime code for each service lives under its `server/` package. Tests are under `*/tests` (pytest).
 
 ## Build, Test, and Development Commands
-- Setup once (per service): `python3 -m venv .venv && source .venv/bin/activate && pip install fastapi uvicorn pytest`
+- One venv per repo (preferred): `python3 -m venv .venv && source .venv/bin/activate && pip install -U pip fastapi uvicorn pytest`
+- Runners auto‑use `.venv` (no activation needed): `./<Service>/run-tests-and-server.sh`
 - Run tests:
   - `pytest -q Code-Log-Search-MCP/tests`
   - `pytest -q Memory-MCP/tests`
   - `pytest -q Prior-Self-MCP/tests`
 - Run locally:
-  - Code-Log-Search: `./Code-Log-Search-MCP/run-tests-and-server.sh` or `python3 Code-Log-Search-MCP/server/app.py --default-code-root <path> --logs-root <path>` (env: `CLS_CODE_ROOT`, `RN_LOG_DIR`, `CLS_TOKEN`).
-  - Memory-MCP: `./Memory-MCP/run-tests-and-server.sh` or `python3 Memory-MCP/server/app.py --home <dir>` (env: `MEM_HOME`, `MEM_TOKEN`).
-  - Prior-Self-MCP: `python3 Prior-Self-MCP/indexer/build_index.py --home ~/.roadnerd/chatdb` then `python3 Prior-Self-MCP/server/app.py`.
+  - Code-Log-Search: `./Code-Log-Search-MCP/run-tests-and-server.sh` (or `python3 Code-Log-Search-MCP/server/app.py --default-code-root <path> --logs-root <path>`)
+  - Memory-MCP: `./Memory-MCP/run-tests-and-server.sh` (or `python3 Memory-MCP/server/app.py --home <dir>`)
+  - Prior-Self-MCP: `./Prior-Self-MCP/run-tests-and-server.sh`
 
 ## Coding Style & Naming Conventions
 - Python 3.10+; follow PEP 8/257. Use 4‑space indentation, type hints, and module/function `snake_case`; class `CapWords`.
@@ -33,3 +34,9 @@
 
 ## Security & Configuration Tips
 - Do not commit secrets or local DBs. Use env tokens for auth (`CLS_TOKEN`, `MEM_TOKEN`). Default ports: 7080 (CLS), 7090 (MEM), 7070 (Prior‑Self). Data roots default to `~/.roadnerd/...`.
+
+## GPT/Claude/Gemini Notes
+- Use repo `.venv` only; runners detect and use it automatically.
+- Prefer runners over manual `uvicorn`; they run tests (if installed) and start servers consistently.
+- Keep changes small and additive; follow existing endpoint shapes (`/actions/*`, `/mcp`, `/sse/*`) and UI pages (`/docs`, `/mcp_ui`).
+- See `docs/GPT-COLLAB-GUIDE.md` for collaboration tips and PR expectations.
