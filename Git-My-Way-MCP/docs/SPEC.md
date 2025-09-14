@@ -8,13 +8,17 @@ Tools (MCP)
 - branch_list → `{ branches:[{name,current?}], remotes:[{name,heads:[...]}] }`
 - create_branch `{ name, from?: string, checkout?: boolean }` → `{ name, created, checkedOut }`
 - switch_branch `{ name }` → `{ name, success }`
-- diff `{ revspec?: string, staged?: boolean, pathspecs?: string[] }` → `{ patch }` (truncated with logPath when large)
+- diff `{ revspec?: string, staged?: boolean, pathspecs?: string[] }` → `{ patch, truncated?, logPath? }`
 - stage_files `{ paths: string[] }` → `{ staged:[string] }`
 - unstage_files `{ paths: string[] }` → `{ unstaged:[string] }`
-- prepare_commit `{ message, signoff?: boolean, allowEmpty?: boolean, dryRun?: boolean }` → `{ wouldCommit:{ summary } }`
+- prepare_commit `{ message, signoff?: boolean, allowEmpty?: boolean, dryRun?: boolean }` → `{ wouldCommit:{ summary, stats } }`
 - commit `{ message, signoff?: boolean, allowEmpty?: boolean, requireClean?: boolean }` → `{ commit:{ sha, summary } }`
 - push `{ remote?: string, branch?: string, setUpstream?: boolean, forceWithLease?: boolean }` → `{ remote, branch, pushed }`
 - open_pr `{ base, head, title, body }` → `{ url }` (optional; provider via env; may be stub initially)
+- bulk_open_pr `{ prs:[{ base, head, title, body }] }` → `{ results:[{ ok, url?, error? }] }`
+- branch_policy_check `{ name }` → `{ ok, reasons?: [string] }`
+- pr_summary_generate `{ scope?: string, changes?: string }` → `{ title, body }`
+- pr_status `{ idOrUrl }` → `{ state, checks?: any, reviewers?: any }`
 
 HTTP Endpoints (planned)
 - `POST /actions/<tool>` for each tool
@@ -31,6 +35,7 @@ Config (env)
 - `GMW_REPO_ROOT=/home/alex/Projects/Reusable-MCP`
 - `GMW_LOG_DIR=Git-My-Way-MCP/logs`, `GMW_LOG_LEVEL=INFO|DEBUG`
 - `GMW_PROVIDER=github|gitlab` for open_pr (optional)
+- `GMW_PR_TOKEN` (optional) for provider API; treat as secret (never log)
 
 Logging & Audit
 - JSONL per action: `{ ts, tool, args(masked), duration_ms, result: success|error, error? }`
@@ -47,7 +52,7 @@ Test UIs (planned)
 Examples
 - repo_status: `{ "tool":"git-my-way/repo_status", "params":{} }`
 - prepare_commit: `{ "tool":"git-my-way/prepare_commit", "params": { "message":"feat: add X", "dryRun": true } }`
+- bulk_open_pr: `{ "tool":"git-my-way/bulk_open_pr", "params": { "prs": [{"base":"main","head":"feat/one","title":"feat: one","body":"..."}] } }`
 
 Error Codes
 - `E_REPO_FORBIDDEN`, `E_BAD_ARG`, `E_EXEC`, `E_POLICY`, `E_PROVIDER`
-
