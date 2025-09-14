@@ -37,3 +37,7 @@ Config (env)
 Errors
 - `E_TIMEOUT`, `E_FORBIDDEN`, `E_NO_BINARY`, `E_EXEC`, `E_POLICY`
 
+## Test UIs
+- `/docs` (Swagger) for REST actions (`/actions/*`).
+- `/mcp_ui` (MCP playground): exercise `initialize`, `tools/list`, and `tools/call`.
+- `/start` (interactive): list images/containers, inspect, tail container logs (SSE), view live stats (SSE), and gated start/stop controls when mutation is enabled.

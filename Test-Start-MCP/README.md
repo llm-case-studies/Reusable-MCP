@@ -1,11 +1,13 @@
-# Test‑Start‑MCP (Scaffold)
+# Test‑Start‑MCP
 
-Safely start and smoke‑test local MCP services from models when their sandboxes can’t run scripts. This folder is a scaffold only — implementation comes next session.
+Safely start and smoke‑test local MCP services from models when their sandboxes can’t run scripts. This service runs only allow‑listed scripts with validated flags, streams output, and writes audit logs.
 
 - Spec: see `docs/SPEC.md`
-- Quickstart (planned): see `docs/QUICKSTART.md`
-- UI smoke (planned): see `docs/PLAYWRIGHT-SMOKE.md`
-- Runner (planned): `run-tests-and-server.sh`
+- Quickstart: see `docs/QUICKSTART.md`
+- UI: `/mcp_ui` (minimal MCP playground)
+- Runner: `./Test-Start-MCP/run-tests-and-server.sh`
 
-Status: Not implemented yet. Server files are placeholders to validate repo layout and docs.
+Status: Implemented. Endpoints: `/actions/run_script`, `/actions/list_allowed`, `/sse/run_script_stream`, `/mcp`, `/healthz`.
 
+Test UIs
+- `/docs` (Swagger), `/mcp_ui` (MCP playground), `/start` (interactive UI)

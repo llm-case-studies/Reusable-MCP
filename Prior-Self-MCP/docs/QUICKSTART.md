@@ -33,3 +33,8 @@ curl -s -X POST http://127.0.0.1:7070/actions/search_previous_chats \
 ## Serena/Context7
 - Register this server as an HTTP MCP tool.
 - Actions: search_previous_chats, get_chat_context, summarize_decisions, list_sessions.
+
+Test UIs
+- `/docs` (Swagger) for REST actions
+- `/mcp_ui` (MCP playground): initialize, tools/list, tools/call
+- `/start` (interactive): search_previous_chats, get_chat_context, summarize_decisions, list_sessions

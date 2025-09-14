@@ -16,11 +16,15 @@ Tools (MCP)
   - Input: `{}`
   - Output: `{ scripts: [{ path, allowedArgs: [string], defaultArgs?: [string] }] }`
 
-HTTP Endpoints (planned)
+HTTP Endpoints
+- `GET /start` → Interactive UI for allowed/list, run_script (REST + SSE), logs stream, stats, health
 - `POST /actions/run_script` → run_script
 - `POST /actions/list_allowed` → list_allowed
+- `POST /actions/search_logs` → search audit logs
+- `POST /actions/get_stats` → aggregated execution stats
 - `GET /sse/run_script_stream` → stream stdout/stderr/end/error
-- `GET /healthz` → `{ ok: true, name, version }`
+- `GET /sse/logs_stream` → stream audit logs
+- `GET /healthz` → `{ ok: true, name, version, checks: {...} }`
 
 Security & Policy
 - Allowlist (minimal, explicit)
@@ -52,9 +56,10 @@ MCP JSON‑RPC
 - tools/list → definitions for `run_script`, `list_allowed` (reference `run_script_stream` under SSE)
 - tools/call → returns `{ content, structuredContent, isError }`
 
-Test UIs (planned)
+Test UIs
 - `/docs` (Swagger) for REST
 - `/mcp_ui` (MCP playground): initialize, list, run_script
+- `/start` (interactive): run_script (REST+SSE), list_allowed, logs_stream, get_stats, health
 
 Attach‑on‑Request
 - If the model requests `test-start/run_script`, attach server and call it. Prefer SSE for live output.
@@ -75,4 +80,3 @@ Examples
 
 Error Codes
 - `E_FORBIDDEN`, `E_BAD_ARG`, `E_TIMEOUT`, `E_EXEC`, `E_POLICY`
-

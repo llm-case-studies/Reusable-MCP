@@ -17,3 +17,7 @@ Config (env)
 Errors
 - `E_NO_BINARY` (no systemctl/journalctl), `E_TIMEOUT`, `E_UNSUPPORTED`
 
+## Test UIs
+- `/docs` (Swagger) for REST actions (`/actions/*`).
+- `/mcp_ui` (MCP playground): initialize, tools/list, tools/call for service diagnostics.
+- `/start` (interactive): service_status (form), list_failed_units, journal_tail (textarea output). Read‑only by default.

@@ -20,3 +20,7 @@ Config (env)
 Errors
 - `E_NO_BINARY`, `E_TIMEOUT`, `E_FORBIDDEN`, `E_UNSUPPORTED`
 
+## Test UIs
+- `/docs` (Swagger) for REST actions (`/actions/*`).
+- `/mcp_ui` (MCP playground): initialize, tools/list, tools/call for sys diagnostics.
+- `/start` (interactive): run listening_sockets, who_uses_port, os_info, cpu_mem_info, disk_usage, top_consumers; display results in panels for quick manual and Playwright testing.

@@ -26,3 +26,7 @@ Config (env)
 Errors
 - `E_TIMEOUT`, `E_NO_BINARY`, `E_UNSUPPORTED`, `E_DNS_FAIL`, `E_CONN_REFUSED`
 
+## Test UIs
+- `/docs` (Swagger) for REST actions (`/actions/*`).
+- `/mcp_ui` (MCP playground): initialize, tools/list, tools/call for network diagnostics.
+- `/start` (interactive): run http_check, tcp_port_check, dns_resolve/config, resolved_status, proxy_env_status/connectivity; show results and optional streaming outputs where applicable.

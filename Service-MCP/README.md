@@ -7,3 +7,5 @@ Phase-1 service diagnostics: service_status, list_failed_units, journal_tail. Sc
 - UI smoke (planned): see `docs/PLAYWRIGHT-SMOKE.md`
 - Runner: `run-tests-and-server.sh`
 
+Test UIs
+- `/docs` (Swagger), `/mcp_ui` (MCP playground), `/start` (interactive UI)

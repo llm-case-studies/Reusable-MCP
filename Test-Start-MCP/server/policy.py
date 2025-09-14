@@ -46,7 +46,15 @@ def auth_ok(request) -> bool:
 
 def list_allowed_scripts() -> List[Dict[str, Any]]:
     allowed = _split_env_list(os.environ.get('TSM_ALLOWED_SCRIPTS'))
-    allowed_args = set(_split_env_list(os.environ.get('TSM_ALLOWED_ARGS')))
+    allowed_args_raw = os.environ.get('TSM_ALLOWED_ARGS', '')
+    # Handle both comma-separated and colon/semicolon separated args
+    allowed_args = set()
+    for part in allowed_args_raw.replace(';', ':').split(':'):
+        for arg in part.split(','):
+            arg = arg.strip()
+            if arg:
+                allowed_args.add(arg)
+
     out = []
     for p in allowed:
         out.append({'path': p, 'allowedArgs': sorted(list(allowed_args))})
@@ -87,7 +95,14 @@ def _normalize_args(raw_args: Iterable[Any]) -> List[str]:
 
 
 def _validate_args(args: List[str]) -> Tuple[bool, Optional[Dict[str, str]]]:
-    allowed = set(_split_env_list(os.environ.get('TSM_ALLOWED_ARGS')))
+    # Handle both comma-separated and colon/semicolon separated args
+    allowed_args_raw = os.environ.get('TSM_ALLOWED_ARGS', '')
+    allowed = set()
+    for part in allowed_args_raw.replace(';', ':').split(':'):
+        for arg in part.split(','):
+            arg = arg.strip()
+            if arg:
+                allowed.add(arg)
     i = 0
     while i < len(args):
         tok = args[i]
