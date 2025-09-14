@@ -1,0 +1,9 @@
+# Service-MCP (Scaffold)
+
+Phase-1 service diagnostics: service_status, list_failed_units, journal_tail. Scaffold only — implementation to follow SPEC.
+
+- Spec: see `docs/SPEC.md`
+- Quickstart: see `docs/QUICKSTART.md`
+- UI smoke (planned): see `docs/PLAYWRIGHT-SMOKE.md`
+- Runner: `run-tests-and-server.sh`
+
