@@ -16,7 +16,7 @@ Tools (MCP)
   - Input: `{}`
   - Output: `{ scripts: [{ path, allowedArgs: [string], defaultArgs?: [string] }] }`
 
-HTTP Endpoints (planned)
+HTTP Endpoints
 - `POST /actions/run_script` → run_script
 - `POST /actions/list_allowed` → list_allowed
 - `GET /sse/run_script_stream` → stream stdout/stderr/end/error
@@ -75,4 +75,3 @@ Examples
 
 Error Codes
 - `E_FORBIDDEN`, `E_BAD_ARG`, `E_TIMEOUT`, `E_EXEC`, `E_POLICY`
-

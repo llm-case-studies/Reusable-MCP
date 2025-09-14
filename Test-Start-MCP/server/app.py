@@ -28,7 +28,10 @@ try:
     )
 except Exception:
     # script import
-    from server.policy import (
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent))
+    from policy import (
         PROTOCOL_VERSION,
         list_allowed_scripts,
         validate_and_prepare,
