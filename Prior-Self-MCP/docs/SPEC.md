@@ -37,3 +37,8 @@
 ## Auth & Limits
 - Optional bearer token via PRIOR_SELF_TOKEN for protected deployments
 - Max response sizes; large contexts returned as paths to files
+
+## Test UIs
+- `/docs` (Swagger) for REST actions (`/actions/*`).
+- `/mcp_ui` (MCP playground): initialize, tools/list, tools/call for prior‑self tools.
+- `/start` (interactive): search_previous_chats, get_chat_context (with message window controls), summarize_decisions, list_sessions. Provide read‑only viewers for manual and Playwright testing.

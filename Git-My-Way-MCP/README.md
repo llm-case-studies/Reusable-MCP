@@ -9,3 +9,5 @@ Uniform, safe git workflows exposed via MCP tools. Standardizes commit/push/PR t
 
 Status: Not implemented yet. Placeholders included to validate repo layout and enable a docs-first implementation.
 
+Test UIs
+- `/docs` (Swagger), `/mcp_ui` (MCP playground), `/start` (interactive UI)

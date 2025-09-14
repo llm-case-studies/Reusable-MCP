@@ -30,6 +30,9 @@ Dev runner
 UI smoke (Playwright)
 - See docs/PLAYWRIGHT-SMOKE.md for a minimal UI smoke that drives `/mcp_ui` and verifies calls.
 
+Test UIs
+- `/docs` (Swagger), `/mcp_ui` (MCP playground), `/start` (interactive UI)
+
 ## Auth
 - Optional bearer token via `PRIOR_TOKEN` (or `PRIOR_SELF_TOKEN`). If set, all endpoints (including `/mcp`) require `Authorization: Bearer <token>`.
 

@@ -477,6 +477,140 @@ def create_app() -> FastAPI:
         '''
         return HTMLResponse(content=html)
 
+    @app.get('/start')
+    async def start_ui():
+        html = f'''
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Test-Start-MCP UI</title>
+          <style>
+            body {{ font-family: system-ui, sans-serif; background: #0b1220; color: #e0e6f0; padding: 20px; }}
+            section {{ background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 16px; margin-bottom: 16px; }}
+            label {{ display: block; margin: 6px 0; }}
+            input, textarea {{ width: 100%; background: #0b1220; color: #e0e6f0; border: 1px solid #374151; border-radius: 6px; padding: 8px; }}
+            button {{ background: #2563eb; color: white; border: 0; border-radius: 6px; padding: 8px 12px; cursor: pointer; margin-right: 6px; }}
+            pre {{ background: #0b1220; border: 1px solid #1f2937; border-radius: 8px; padding: 10px; max-height: 50vh; overflow: auto; }}
+            small {{ color: #94a3b8; }}
+            .row {{ display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }}
+          </style>
+        </head>
+        <body>
+          <h1>Test‑Start‑MCP — UI</h1>
+          <small>Authorization uses TSM_TOKEN from localStorage if set.</small>
+
+          <section>
+            <h2>Allowed Scripts</h2>
+            <button onclick="loadAllowed()">List Allowed</button>
+            <pre id="allowedOut">(none)</pre>
+          </section>
+
+          <section>
+            <h2>Run Script (REST)</h2>
+            <label>Path <input id="sp" value="/home/alex/Projects/Reusable-MCP/Memory-MCP/run-tests-and-server.sh"/></label>
+            <label>Args (comma or JSON array) <input id="sa" value="--no-tests,--smoke"/></label>
+            <label>Timeout (ms) <input id="st" value="30000"/></label>
+            <button onclick="runScript()">POST /actions/run_script</button>
+            <pre id="runOut">(no result)</pre>
+          </section>
+
+          <section>
+            <h2>Run Script (SSE)</h2>
+            <label>Path <input id="ssp" value="/home/alex/Projects/Reusable-MCP/Memory-MCP/run-tests-and-server.sh"/></label>
+            <label>Args (comma or JSON array) <input id="ssa" value="--no-tests,--smoke"/></label>
+            <label>Timeout (ms) <input id="sst" value="30000"/></label>
+            <button onclick="startStream()">Open SSE</button>
+            <button onclick="stopStream()">Close SSE</button>
+            <pre id="streamOut">(no stream)</pre>
+          </section>
+
+          <div class="row">
+            <section>
+              <h2>Logs Stream</h2>
+              <button onclick="openLogs()">Open Logs SSE</button>
+              <button onclick="closeLogs()">Close</button>
+              <pre id="logsOut">(no logs)</pre>
+            </section>
+            <section>
+              <h2>Stats & Health</h2>
+              <button onclick="getStats()">POST /actions/get_stats</button>
+              <button onclick="health()">GET /healthz</button>
+              <pre id="statsOut">(no stats)</pre>
+              <pre id="healthOut">(no health)</pre>
+            </section>
+          </div>
+
+          <script>
+            let es=null; let esLogs=null;
+            function headers(){
+              const t = localStorage.getItem('TSM_TOKEN') || '';
+              const h = {'Content-Type':'application/json','Accept':'application/json'};
+              if (t) h['Authorization'] = 'Bearer '+t; return h;
+            }
+            function j(o){ try { return JSON.stringify(o, null, 2) } catch(e){ return String(o) } }
+            function parseArgs(s){
+              if (!s) return [];
+              const t = s.trim();
+              if (t.startsWith('[')) { try { return JSON.parse(t) } catch(e){ return [] } }
+              return t.split(',').map(x=>x.trim()).filter(Boolean);
+            }
+
+            async function loadAllowed(){
+              const r = await fetch('/actions/list_allowed', {method:'POST', headers: headers(), body: '{}'});
+              document.getElementById('allowedOut').textContent = j(await r.json());
+            }
+            async function runScript(){
+              const path = document.getElementById('sp').value;
+              const args = parseArgs(document.getElementById('sa').value);
+              const timeout_ms = parseInt(document.getElementById('st').value||'0')||null;
+              const body = { path, args, timeout_ms };
+              const r = await fetch('/actions/run_script', {method:'POST', headers: headers(), body: JSON.stringify(body)});
+              document.getElementById('runOut').textContent = j(await r.json());
+            }
+            function startStream(){
+              stopStream();
+              const path = document.getElementById('ssp').value;
+              const args = document.getElementById('ssa').value;
+              const timeout_ms = parseInt(document.getElementById('sst').value||'0')||null;
+              const q = new URLSearchParams();
+              q.set('path', path);
+              if (args) q.set('args', args);
+              if (timeout_ms) q.set('timeout_ms', String(timeout_ms));
+              const url = '/sse/run_script_stream?' + q.toString();
+              const out = document.getElementById('streamOut');
+              out.textContent = '';
+              es = new EventSource(url);
+              es.onmessage = (ev)=>{ out.textContent += ev.data + "\n" };
+              es.addEventListener('stdout', ev=>{ out.textContent += '[stdout] '+ev.data+"\n" });
+              es.addEventListener('stderr', ev=>{ out.textContent += '[stderr] '+ev.data+"\n" });
+              es.addEventListener('end', ev=>{ out.textContent += '[end] '+ev.data+"\n" });
+              es.addEventListener('error', ev=>{ out.textContent += '[error] '+ev.data+"\n" });
+            }
+            function stopStream(){ if (es){ es.close(); es=null; } }
+            function openLogs(){
+              closeLogs();
+              const out = document.getElementById('logsOut'); out.textContent='';
+              esLogs = new EventSource('/sse/logs_stream');
+              esLogs.addEventListener('log', ev=>{ out.textContent += ev.data+"\n" });
+              esLogs.onmessage = (ev)=>{ out.textContent += ev.data+"\n" };
+              esLogs.addEventListener('info', ev=>{ out.textContent += '[info] '+ev.data+"\n" });
+              esLogs.addEventListener('error', ev=>{ out.textContent += '[error] '+ev.data+"\n" });
+            }
+            function closeLogs(){ if (esLogs){ esLogs.close(); esLogs=null; } }
+            async function getStats(){
+              const r = await fetch('/actions/get_stats', {method:'POST', headers: headers(), body: '{}'});
+              document.getElementById('statsOut').textContent = j(await r.json());
+            }
+            async function health(){
+              const r = await fetch('/healthz');
+              document.getElementById('healthOut').textContent = j(await r.json());
+            }
+          </script>
+        </body>
+        </html>
+        '''
+        return HTMLResponse(content=html)
+
     return app
 
 

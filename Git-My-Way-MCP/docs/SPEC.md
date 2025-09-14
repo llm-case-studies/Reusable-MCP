@@ -48,6 +48,7 @@ MCP JSON-RPC
 Test UIs (planned)
 - `/docs` (Swagger)
 - `/mcp_ui` playground: initialize, list, call commit/push with dry-run safeguards
+- `/start` (interactive): repo status, branch list/switch, diff viewer, stage/unstage, prepare_commit/commit, push (gated by env/policy)
 
 Examples
 - repo_status: `{ "tool":"git-my-way/repo_status", "params":{} }`

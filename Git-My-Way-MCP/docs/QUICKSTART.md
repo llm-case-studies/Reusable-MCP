@@ -9,6 +9,11 @@ Endpoints
 Runner
 - `./Git-My-Way-MCP/run-tests-and-server.sh` (auto-uses repo .venv if present)
 
+Test UIs
+- `/docs` (Swagger) for REST actions
+- `/mcp_ui` (MCP playground): initialize, tools/list, tools/call
+- `/start` (interactive): status, branches, diff, stage/unstage, prepare_commit/commit, push (gated)
+
 MCP (examples)
 ```
 # initialize
@@ -21,4 +26,3 @@ curl -sS -H 'Accept: application/json' \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
   http://127.0.0.1:7050/mcp | jq .
 ```
-

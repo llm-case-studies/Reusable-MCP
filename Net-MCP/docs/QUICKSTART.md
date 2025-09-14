@@ -9,3 +9,7 @@ Endpoints
 Runner
 - `./Net-MCP/run-tests-and-server.sh` (auto-uses repo .venv if present)
 
+Test UIs
+- `/docs` (Swagger) for REST actions
+- `/mcp_ui` (MCP playground): initialize, tools/list, tools/call
+- `/start` (interactive): http_check, tcp_port_check, dns_resolve/config, resolved_status, proxy checks

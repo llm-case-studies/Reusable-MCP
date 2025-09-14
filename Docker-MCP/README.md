@@ -8,3 +8,5 @@ Cautious Docker/Podman management via MCP tools. Read-only by default (info/list
 - UI smoke (planned): see `docs/PLAYWRIGHT-SMOKE.md`
 - Runner: `run-tests-and-server.sh`
 
+Test UIs
+- `/docs` (Swagger), `/mcp_ui` (MCP playground), `/start` (interactive UI)

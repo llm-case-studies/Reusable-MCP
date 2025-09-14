@@ -9,8 +9,9 @@ Run
 - Or: `python3 Test-Start-MCP/server/app.py --host 127.0.0.1 --port 7060`
 
 Endpoints
-- REST: `POST /actions/run_script`, `POST /actions/list_allowed`
-- SSE: `GET /sse/run_script_stream`
+- UI: `GET /start` (interactive UI), `GET /mcp_ui` (MCP playground)
+- REST: `POST /actions/run_script`, `POST /actions/list_allowed`, `POST /actions/search_logs`, `POST /actions/get_stats`
+- SSE: `GET /sse/run_script_stream`, `GET /sse/logs_stream`
 - MCP: `POST /mcp` (JSON‑RPC over HTTP)
 - Health: `GET /healthz`
 

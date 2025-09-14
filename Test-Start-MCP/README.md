@@ -8,3 +8,6 @@ Safely start and smoke‑test local MCP services from models when their sandboxe
 - Runner: `./Test-Start-MCP/run-tests-and-server.sh`
 
 Status: Implemented. Endpoints: `/actions/run_script`, `/actions/list_allowed`, `/sse/run_script_stream`, `/mcp`, `/healthz`.
+
+Test UIs
+- `/docs` (Swagger), `/mcp_ui` (MCP playground), `/start` (interactive UI)

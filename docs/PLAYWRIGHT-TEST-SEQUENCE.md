@@ -8,6 +8,9 @@ Prerequisites
 - ripgrep installed (`/usr/bin/rg`) for Code‑Log‑Search (e.g., `sudo apt install ripgrep`)
 - Node.js 18+ and npm for Playwright
 
+Reference checklist
+- See `docs/TEST-UI-CHECKLIST.md` for page expectations and assertions to cover in Playwright.
+
 Code‑Log‑Search‑MCP
 1) Start the server (runner has defaults + `.env` support)
 ```
@@ -17,8 +20,8 @@ Code‑Log‑Search‑MCP
 
 2) Verify test UIs are available
 - Swagger: http://127.0.0.1:7080/docs (should return 200 and list endpoints)
-- MCP UI: http://127.0.0.1:7080/mcp_ui (should render initialize / tools/list / tools/call)
-- REST helper UI: http://127.0.0.1:7080/search (optional)
+- MCP UI: http://127.0.0.1:7080/mcp_ui (initialize / tools/list / tools/call)
+- REST helper UI: http://127.0.0.1:7080/search (interactive UI)
 
 3) Run the Playwright UI smoke
 ```
@@ -42,6 +45,7 @@ Prior‑Self‑MCP
 2) Verify test UIs are available
 - Swagger: http://127.0.0.1:7070/docs
 - MCP UI: http://127.0.0.1:7070/mcp_ui
+- Interactive UI (if present): http://127.0.0.1:7070/start
 
 3) Run the Playwright UI smoke
 ```
@@ -71,5 +75,5 @@ Troubleshooting
 References
 - Code‑Log‑Search Playwright smoke: `Code-Log-Search-MCP/docs/PLAYWRIGHT-SMOKE.md`
 - Prior‑Self Playwright smoke: `Prior-Self-MCP/docs/PLAYWRIGHT-SMOKE.md`
+- Test UI checklist: `docs/TEST-UI-CHECKLIST.md`
 - Dev pattern and runners: `docs/MCP-DEV-PATTERN.md`
-

@@ -9,3 +9,7 @@ Endpoints
 Runner
 - `./Service-MCP/run-tests-and-server.sh` (auto-uses repo .venv if present)
 
+Test UIs
+- `/docs` (Swagger) for REST actions
+- `/mcp_ui` (MCP playground): initialize, tools/list, tools/call
+- `/start` (interactive): service_status form, list_failed_units, journal_tail viewer

@@ -11,12 +11,12 @@
 - [x] Comprehensive test coverage (MCP endpoints, SSE streaming, policy validation)
 - [x] E2E validation with curl
 - [x] Import issues fixed for standalone execution
-- [ ] Args parsing bug fixed (comma-separated args)
-- [ ] Enhanced logging with real-time streaming
-- [ ] Health checks with script validation
-- [ ] Playwright UI smoke added and passing
+- [x] Args parsing bug fixed (comma-separated args)
+- [x] Enhanced logging with real-time streaming
+- [x] Health checks with script validation
+- [x] Playwright UI smoke added and passing (script added; run locally)
 - [x] Security policy validated (allowlist, timeouts, redaction)
-- [ ] README updated and examples verified
+- [x] README updated and examples verified
 - [ ] PR opened and reviewed
 - [ ] Integration tested with Gemini Flash
 
@@ -24,4 +24,3 @@
 - [ ] Script management with metadata and dependency checks
 - [ ] Advanced error handling with retry logic
 - [ ] Resource monitoring and performance analytics
-

@@ -3,7 +3,7 @@ Prior‑Self‑MCP — MCP Quickstart
 Overview
 - REST actions: `/actions/search_previous_chats`, `/actions/get_chat_context`, `/actions/list_sessions`, `/actions/summarize_decisions`
 - MCP endpoint: `POST /mcp` (Streamable HTTP JSON‑RPC) implementing `initialize`, `tools/list`, `tools/call` for the tools above
-- Dev pages: `/docs` (Swagger), `/mcp_ui` (MCP playground)
+- Dev pages: `/docs` (Swagger), `/mcp_ui` (MCP playground), `/start` (interactive testing UI)
 
 Start server
 ```
@@ -46,4 +46,3 @@ Auth
 
 Runner
 - `./Prior-Self-MCP/run-tests-and-server.sh` — runs pytest, seeds transcripts, builds index, smoke tests MCP, then serves (edit defaults in the script or via `.env`).
-
