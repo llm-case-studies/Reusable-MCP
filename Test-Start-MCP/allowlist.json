@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "rules": [],
+  "overlays": [],
+  "profiles": {
+    "tester":    {"caps": {"maxTimeoutMs": 10000,  "maxBytes": 65536,  "maxStdoutLines": 200,  "concurrency": 1}, "flagsAllowed": ["--no-tests", "--smoke"]},
+    "reviewer":  {"caps": {"maxTimeoutMs": 30000,  "maxBytes": 131072, "maxStdoutLines": 500,  "concurrency": 1}, "flagsAllowed": ["--no-tests", "--smoke", "--kill-port"]},
+    "developer": {"caps": {"maxTimeoutMs": 90000,  "maxBytes": 262144, "maxStdoutLines": 1500, "concurrency": 2}, "flagsAllowed": ["--no-tests", "--smoke", "--kill-port", "--host", "--port"]},
+    "architect": {"caps": {"maxTimeoutMs": 180000, "maxBytes": 524288, "maxStdoutLines": 3000, "concurrency": 3}, "flagsAllowed": ["--no-tests", "--smoke", "--kill-port", "--host", "--port"]}
+  }
+}
+

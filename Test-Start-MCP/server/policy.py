@@ -213,10 +213,10 @@ def _truncate_text(s: str, limit: int) -> Tuple[str, bool]:
     return out, True
 
 
-def _audit_log(prep: Prepared, result: Dict[str, Any]) -> None:
+def _audit_log(prep: Prepared, result: Dict[str, Any]) -> Optional[str]:
     try:
         if not prep.log_dir:
-            return
+            return None
         prep.log_dir.mkdir(parents=True, exist_ok=True)
         ts = time.strftime('%Y%m%d')
         fp = prep.log_dir / f'exec-{ts}.jsonl'
@@ -232,8 +232,10 @@ def _audit_log(prep: Prepared, result: Dict[str, Any]) -> None:
         }
         with open(fp, 'a', encoding='utf-8') as f:
             f.write(json.dumps(line, ensure_ascii=False) + '\n')
+        return str(fp)
     except Exception as e:
         logging.getLogger('test-start-mcp').debug('audit log failed: %s', e)
+        return None
 
 
 def run_sync(prep: Prepared) -> Dict[str, Any]:
@@ -255,14 +257,18 @@ def run_sync(prep: Prepared) -> Dict[str, Any]:
             out, t1 = _truncate_text(out or '', prep.max_output_bytes)
             err, t2 = _truncate_text(err or '', prep.max_output_bytes)
             truncated = t1 or t2
+            log_path = _audit_log(prep, {
+                'exitCode': int(proc.returncode if 'proc' in locals() else 0),
+                'duration_ms': int((time.time() - start) * 1000)
+            })
             res = {
                 'exitCode': int(exit_code),
                 'duration_ms': duration_ms,
                 'stdout': out,
                 'stderr': err,
                 'truncated': truncated,
+                'logPath': log_path,
             }
-            _audit_log(prep, res)
             return res
         except subprocess.TimeoutExpired:
             try:
@@ -270,18 +276,24 @@ def run_sync(prep: Prepared) -> Dict[str, Any]:
             except Exception:
                 pass
             duration_ms = int((time.time() - start) * 1000)
+            log_path = _audit_log(prep, {
+                'exitCode': -1,
+                'duration_ms': duration_ms
+            })
             res = {
                 'exitCode': -1,
                 'duration_ms': duration_ms,
                 'stderr': 'timeout',
                 'truncated': True,
+                'logPath': log_path,
             }
-            _audit_log(prep, res)
             return res
     except FileNotFoundError:
-        return {'exitCode': 127, 'duration_ms': 0, 'stderr': 'not found', 'truncated': False}
+        log_path = _audit_log(prep, {'exitCode': 127, 'duration_ms': 0}) if 'prep' in locals() else None
+        return {'exitCode': 127, 'duration_ms': 0, 'stderr': 'not found', 'truncated': False, 'logPath': log_path}
     except Exception as e:
-        return {'exitCode': 1, 'duration_ms': 0, 'stderr': str(e), 'truncated': False}
+        log_path = _audit_log(prep, {'exitCode': 1, 'duration_ms': 0}) if 'prep' in locals() else None
+        return {'exitCode': 1, 'duration_ms': 0, 'stderr': str(e), 'truncated': False, 'logPath': log_path}
 
 
 def stream_process(prep: Prepared) -> Iterable[Dict[str, Any]]:

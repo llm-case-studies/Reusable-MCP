@@ -86,10 +86,15 @@ def test_mcp_tools_list(tmp_path: Path, monkeypatch):
     assert 'result' in resp
     assert 'tools' in resp['result']
     tools = resp['result']['tools']
-    assert len(tools) == 2
+    # At least the two core tools must be present; optional extras (e.g., check_script) may be added.
+    assert len(tools) >= 2
     tool_names = {t['name'] for t in tools}
     assert 'run_script' in tool_names
     assert 'list_allowed' in tool_names
+    # If check_script is present, it should have expected fields
+    if 'check_script' in tool_names:
+        chk = next(t for t in tools if t['name'] == 'check_script')
+        assert 'inputSchema' in chk and 'outputSchema' in chk
 
 
 def test_mcp_run_script_success(tmp_path: Path, monkeypatch):
