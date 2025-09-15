@@ -10,3 +10,6 @@ Combined network diagnostics: interface/route info, DNS resolve, HTTP reachabili
 
 Test UIs
 - `/docs` (Swagger), `/mcp_ui` (MCP playground), `/start` (interactive UI)
+
+Ports
+- Default: `127.0.0.1:7030` (planned)

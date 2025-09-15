@@ -12,6 +12,7 @@ Options
 - `TSM_TOKEN=…` to set bearer auth; script stores it in localStorage for `/mcp_ui`.
 - `TSM_PLAYWRIGHT_SCRIPT=…` absolute path to an allow‑listed script (default uses Memory-MCP runner in this repo).
 - `HEADFUL=1` to show the browser.
+- `TSM_PW_OUT=Test-Start-MCP/.pw-artifacts` to change artifacts output directory (screenshots, console log).
 
 What it checks
 - `/mcp_ui` initialize and tools/list flows.
@@ -22,6 +23,7 @@ What it checks
   - Run Script (SSE) and receive stdout/stderr/end
   - Open Logs Stream and receive events
   - Get Stats and Health
+  - Negative checks (best-effort): bad args and forbidden path return 400/403; search_logs returns totals.
 
 Notes
 - Server logs are written to `Test-Start-MCP/logs/` (see SPEC for details).

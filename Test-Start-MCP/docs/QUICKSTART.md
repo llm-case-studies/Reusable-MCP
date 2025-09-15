@@ -5,7 +5,8 @@ One venv per repo (auto‑used by runners)
 - Runners discover `./.venv/bin/python` automatically; activation is optional.
 
 Run
-- `./Test-Start-MCP/run-tests-and-server.sh` (runs tests if pytest installed, then starts on :7060)
+- `./Test-Start-MCP/run-tests-and-server.sh` (runs tests if pytest installed, frees the port, then starts on `TSM_HOST:TSM_PORT`)
+- Defaults: `TSM_HOST=127.0.0.1`, `TSM_PORT=7060` — override via env
 - Or: `python3 Test-Start-MCP/server/app.py --host 127.0.0.1 --port 7060`
 
 Endpoints

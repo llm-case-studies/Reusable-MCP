@@ -21,10 +21,16 @@ Security
 - Read-only commands; timeouts (default 2000ms); allowlist for http_check URLs; no sudo; redact headers/tokens.
 
 Config (env)
-- `NET_TIMEOUT_MS_DEFAULT=2000`, `NET_HTTP_ALLOWLIST=neverssl.com,httpbin.org`, `NET_LOG_DIR`, `NET_TOKEN`
+- `NET_TIMEOUT_MS_DEFAULT=2000`, `NET_HTTP_ALLOWLIST=neverssl.com,httpbin.org`
+- App logging: `NET_LOG_DIR=Net-MCP/logs`, `NET_LOG_FILE=<file>`, `NET_LOG_TS=0|1`, `NET_LOG_ROTATE=<bytes>`, `NET_LOG_BACKUPS=<n>`, `NET_LOG_LEVEL=INFO|DEBUG`, `NET_TOKEN`
+- Network: `NET_HOST=127.0.0.1`, `NET_PORT=7030` (default)
 
 Errors
 - `E_TIMEOUT`, `E_NO_BINARY`, `E_UNSUPPORTED`, `E_DNS_FAIL`, `E_CONN_REFUSED`
+
+Logging & Audit
+- JSONL audit (planned) for key actions under `NET_LOG_DIR` with records like `{ ts, tool, args(masked), duration_ms, status }`.
+- Optional app log file as configured via `NET_LOG_DIR`/`NET_LOG_FILE` with rotation options.
 
 ## Test UIs
 - `/docs` (Swagger) for REST actions (`/actions/*`).

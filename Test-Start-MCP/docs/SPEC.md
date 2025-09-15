@@ -45,11 +45,12 @@ Security & Policy
 Config (env)
 - `TSM_ALLOWED_ROOT`, `TSM_ALLOWED_SCRIPTS`, `TSM_ALLOWED_ARGS`, `TSM_ENV_ALLOWLIST`
 - `TSM_TIMEOUT_MS_DEFAULT=90000`, `TSM_MAX_OUTPUT_BYTES=262144`, `TSM_MAX_LINE_BYTES=8192`
-- `TSM_LOG_DIR=Test-Start-MCP/logs`, `TSM_LOG_LEVEL=INFO|DEBUG`
+- Network: `TSM_HOST=127.0.0.1`, `TSM_PORT=7060` (default)
+- Logging (app): `TSM_LOG_DIR`, `TSM_LOG_FILE`, `TSM_LOG_TS=0|1`, `TSM_LOG_ROTATE=<bytes>`, `TSM_LOG_BACKUPS=<n>`, `TSM_LOG_LEVEL=INFO|DEBUG`
 
 Logging & Audit
-- JSONL: `{ ts, tool, path, args, duration_ms, exitCode, result, truncated, requester? }`
-- File logging under `TSM_LOG_DIR`.
+- JSONL audit per execution: `{ ts, tool, path, args, duration_ms, exitCode, result, truncated, requester? }` (files `exec-YYYYMMDD.jsonl` under `TSM_LOG_DIR`)
+- Optional app logging under `TSM_LOG_DIR` or `TSM_LOG_FILE` with rotation.
 
 MCP JSON‑RPC
 - initialize → `{ protocolVersion, capabilities.tools, serverInfo }`
@@ -60,6 +61,9 @@ Test UIs
 - `/docs` (Swagger) for REST
 - `/mcp_ui` (MCP playground): initialize, list, run_script
 - `/start` (interactive): run_script (REST+SSE), list_allowed, logs_stream, get_stats, health
+
+Singleton policy
+- One instance per machine: the dev runner frees the configured port before starting to avoid stale processes.
 
 Attach‑on‑Request
 - If the model requests `test-start/run_script`, attach server and call it. Prefer SSE for live output.

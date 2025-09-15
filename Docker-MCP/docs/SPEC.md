@@ -32,10 +32,15 @@ Config (env)
 - `DOCKER_MCP_MUTATE=0|1` (default 0)
 - `DOCKER_MCP_ALLOWED_REGISTRIES=docker.io,ghcr.io`
 - `DOCKER_MCP_ALLOWED_NAMES=app*,service-*`
-- `DOCKER_MCP_LOG_DIR=Docker-MCP/logs`, `DOCKER_MCP_LOG_LEVEL=INFO|DEBUG`
+ - App logging: `DOCKER_MCP_LOG_DIR=Docker-MCP/logs`, `DOCKER_MCP_LOG_FILE=<file>`, `DOCKER_MCP_LOG_TS=0|1`, `DOCKER_MCP_LOG_ROTATE=<bytes>`, `DOCKER_MCP_LOG_BACKUPS=<n>`, `DOCKER_MCP_LOG_LEVEL=INFO|DEBUG`
+ - Network: `DOCKER_MCP_HOST=127.0.0.1`, `DOCKER_MCP_PORT=7020` (default)
 
 Errors
 - `E_TIMEOUT`, `E_FORBIDDEN`, `E_NO_BINARY`, `E_EXEC`, `E_POLICY`
+
+Logging & Audit
+- JSONL audit (planned) per action under `DOCKER_MCP_LOG_DIR` with records like `{ ts, tool, args(masked), duration_ms, exitCode, result }`.
+- Optional app log file as configured via `DOCKER_MCP_LOG_DIR`/`DOCKER_MCP_LOG_FILE` with rotation options.
 
 ## Test UIs
 - `/docs` (Swagger) for REST actions (`/actions/*`).

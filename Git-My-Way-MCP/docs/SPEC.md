@@ -33,12 +33,14 @@ Security & Policy
 
 Config (env)
 - `GMW_REPO_ROOT=/home/alex/Projects/Reusable-MCP`
-- `GMW_LOG_DIR=Git-My-Way-MCP/logs`, `GMW_LOG_LEVEL=INFO|DEBUG`
+- App logging: `GMW_LOG_DIR=Git-My-Way-MCP/logs`, `GMW_LOG_FILE=<file>`, `GMW_LOG_TS=0|1`, `GMW_LOG_ROTATE=<bytes>`, `GMW_LOG_BACKUPS=<n>`, `GMW_LOG_LEVEL=INFO|DEBUG`
 - `GMW_PROVIDER=github|gitlab` for open_pr (optional)
 - `GMW_PR_TOKEN` (optional) for provider API; treat as secret (never log)
+ - Network: `GMW_HOST=127.0.0.1`, `GMW_PORT=7050` (default)
 
 Logging & Audit
-- JSONL per action: `{ ts, tool, args(masked), duration_ms, result: success|error, error? }`
+- JSONL per action (planned): `{ ts, tool, args(masked), duration_ms, result: success|error, error? }`
+- Optional app log file as configured via `GMW_LOG_DIR`/`GMW_LOG_FILE` with rotation options.
 
 MCP JSON-RPC
 - initialize → `{ protocolVersion, capabilities.tools, serverInfo }`
