@@ -403,7 +403,9 @@ def create_app() -> FastAPI:
 
     @app.get('/mcp_ui')
     async def mcp_ui():
-        html = '''
+        from pathlib import Path as _P
+        _default_script = str(_P(__file__).resolve().parents[1] / 'run-tests-and-server.sh')
+        html = """
         <!DOCTYPE html>
         <html>
         <head>
@@ -436,10 +438,7 @@ def create_app() -> FastAPI:
             <h2>Call Tool</h2>
             <label>Tool name <input id="tname" value="run_script"/></label>
             <label>Arguments (JSON)
-              <textarea id="targs" rows="6">{
-  "path": "/bin/echo",
-  "args": ["hello"]
-}</textarea></label>
+              <textarea id="targs" rows="6">{}</textarea></label>
             <button onclick="callTool()">tools/call</button>
             <pre id="callOut">(no call)</pre>
           </section>
@@ -474,25 +473,27 @@ def create_app() -> FastAPI:
           </script>
         </body>
         </html>
-        '''
+        """
         return HTMLResponse(content=html)
 
     @app.get('/start')
     async def start_ui():
-        html = f'''
+        from pathlib import Path as _P
+        _default_script = str(_P(__file__).resolve().parents[1] / 'run-tests-and-server.sh')
+        html = """
         <!DOCTYPE html>
         <html>
         <head>
           <title>Test-Start-MCP UI</title>
           <style>
-            body {{ font-family: system-ui, sans-serif; background: #0b1220; color: #e0e6f0; padding: 20px; }}
-            section {{ background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 16px; margin-bottom: 16px; }}
-            label {{ display: block; margin: 6px 0; }}
-            input, textarea {{ width: 100%; background: #0b1220; color: #e0e6f0; border: 1px solid #374151; border-radius: 6px; padding: 8px; }}
-            button {{ background: #2563eb; color: white; border: 0; border-radius: 6px; padding: 8px 12px; cursor: pointer; margin-right: 6px; }}
-            pre {{ background: #0b1220; border: 1px solid #1f2937; border-radius: 8px; padding: 10px; max-height: 50vh; overflow: auto; }}
-            small {{ color: #94a3b8; }}
-            .row {{ display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }}
+            body { font-family: system-ui, sans-serif; background: #0b1220; color: #e0e6f0; padding: 20px; }
+            section { background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+            label { display: block; margin: 6px 0; }
+            input, textarea { width: 100%; background: #0b1220; color: #e0e6f0; border: 1px solid #374151; border-radius: 6px; padding: 8px; }
+            button { background: #2563eb; color: white; border: 0; border-radius: 6px; padding: 8px 12px; cursor: pointer; margin-right: 6px; }
+            pre { background: #0b1220; border: 1px solid #1f2937; border-radius: 8px; padding: 10px; max-height: 50vh; overflow: auto; }
+            small { color: #94a3b8; }
+            .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
           </style>
         </head>
         <body>
@@ -507,7 +508,7 @@ def create_app() -> FastAPI:
 
           <section>
             <h2>Run Script (REST)</h2>
-            <label>Path <input id="sp" value="/home/alex/Projects/Reusable-MCP/Memory-MCP/run-tests-and-server.sh"/></label>
+            <label>Path <input id="sp"/></label>
             <label>Args (comma or JSON array) <input id="sa" value="--no-tests,--smoke"/></label>
             <label>Timeout (ms) <input id="st" value="30000"/></label>
             <button onclick="runScript()">POST /actions/run_script</button>
@@ -516,7 +517,7 @@ def create_app() -> FastAPI:
 
           <section>
             <h2>Run Script (SSE)</h2>
-            <label>Path <input id="ssp" value="/home/alex/Projects/Reusable-MCP/Memory-MCP/run-tests-and-server.sh"/></label>
+            <label>Path <input id="ssp"/></label>
             <label>Args (comma or JSON array) <input id="ssa" value="--no-tests,--smoke"/></label>
             <label>Timeout (ms) <input id="sst" value="30000"/></label>
             <button onclick="startStream()">Open SSE</button>
@@ -541,6 +542,13 @@ def create_app() -> FastAPI:
           </div>
 
           <script>
+            const DEFAULT_SCRIPT = 
+          </script>
+        </body>
+        </html>
+        """
+        html = html.replace('const DEFAULT_SCRIPT = ', 'const DEFAULT_SCRIPT = ' + json.dumps(_default_script) + ';\n')
+        js = """
             let es=null; let esLogs=null;
             function headers(){
               const t = localStorage.getItem('TSM_TOKEN') || '';
@@ -554,7 +562,10 @@ def create_app() -> FastAPI:
               if (t.startsWith('[')) { try { return JSON.parse(t) } catch(e){ return [] } }
               return t.split(',').map(x=>x.trim()).filter(Boolean);
             }
-
+            (function(){
+              const a = document.getElementById('sp'); if (a) a.value = DEFAULT_SCRIPT;
+              const b = document.getElementById('ssp'); if (b) b.value = DEFAULT_SCRIPT;
+            })();
             async function loadAllowed(){
               const r = await fetch('/actions/list_allowed', {method:'POST', headers: headers(), body: '{}'});
               document.getElementById('allowedOut').textContent = j(await r.json());
@@ -605,10 +616,16 @@ def create_app() -> FastAPI:
               const r = await fetch('/healthz');
               document.getElementById('healthOut').textContent = j(await r.json());
             }
-          </script>
-        </body>
-        </html>
-        '''
+            window.loadAllowed = loadAllowed;
+            window.runScript = runScript;
+            window.startStream = startStream;
+            window.stopStream = stopStream;
+            window.openLogs = openLogs;
+            window.closeLogs = closeLogs;
+            window.getStats = getStats;
+            window.health = health;
+        """
+        html = html.replace('</script>', js + '\n</script>')
         return HTMLResponse(content=html)
 
     return app

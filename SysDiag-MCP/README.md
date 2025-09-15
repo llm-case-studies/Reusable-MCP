@@ -10,3 +10,6 @@ Combined system diagnostics: ports/processes, OS info, CPU/mem, storage usage an
 
 Test UIs
 - `/docs` (Swagger), `/mcp_ui` (MCP playground), `/start` (interactive UI)
+
+Ports
+- Default: `127.0.0.1:7010` (planned)

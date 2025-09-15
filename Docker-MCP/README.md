@@ -10,3 +10,6 @@ Cautious Docker/Podman management via MCP tools. Read-only by default (info/list
 
 Test UIs
 - `/docs` (Swagger), `/mcp_ui` (MCP playground), `/start` (interactive UI)
+
+Ports
+- Default: `127.0.0.1:7020` (planned)

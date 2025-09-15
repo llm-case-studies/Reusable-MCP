@@ -103,6 +103,10 @@ def _validate_args(args: List[str]) -> Tuple[bool, Optional[Dict[str, str]]]:
             arg = arg.strip()
             if arg:
                 allowed.add(arg)
+    value_flags = {
+        '--host', '--port', '--default-code-root', '--logs-root', '--home',
+        '--repeat', '--sleep-ms', '--exit-code', '--stderr-lines', '--bytes'
+    }
     i = 0
     while i < len(args):
         tok = args[i]
@@ -110,7 +114,7 @@ def _validate_args(args: List[str]) -> Tuple[bool, Optional[Dict[str, str]]]:
             if tok not in allowed:
                 return False, {'code': 'E_BAD_ARG', 'message': f'flag not allowed: {tok}'}
             # Flags expecting a value
-            if tok in ('--host', '--port', '--default-code-root', '--logs-root', '--home'):
+            if tok in value_flags:
                 if i + 1 >= len(args):
                     return False, {'code': 'E_BAD_ARG', 'message': f'missing value for {tok}'}
                 val = args[i + 1]
@@ -370,4 +374,3 @@ def tool_schemas() -> List[Dict[str, Any]]:
             'outputSchema': {'type': 'object', 'properties': {'scripts': {'type': 'array', 'items': {'type': 'object'}}}, 'required': ['scripts']}
         }
     ]
-

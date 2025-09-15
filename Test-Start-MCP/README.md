@@ -11,3 +11,7 @@ Status: Implemented. Endpoints: `/actions/run_script`, `/actions/list_allowed`, 
 
 Test UIs
 - `/docs` (Swagger), `/mcp_ui` (MCP playground), `/start` (interactive UI)
+
+Ports
+- Default host/port: `127.0.0.1:7060` (set via `TSM_HOST`, `TSM_PORT`).
+- The runner enforces a singleton: it frees the port before starting to avoid stale processes.

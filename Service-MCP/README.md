@@ -9,3 +9,6 @@ Phase-1 service diagnostics: service_status, list_failed_units, journal_tail. Sc
 
 Test UIs
 - `/docs` (Swagger), `/mcp_ui` (MCP playground), `/start` (interactive UI)
+
+Ports
+- Default: `127.0.0.1:7040` (planned)

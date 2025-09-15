@@ -15,10 +15,15 @@ Security
 - psutil-first; read-only; timeouts; path allowlists for top_consumers.
 
 Config (env)
-- `SYS_LOG_DIR`, `SYS_TOKEN`
+- App logging: `SYS_LOG_DIR=SysDiag-MCP/logs`, `SYS_LOG_FILE=<file>`, `SYS_LOG_TS=0|1`, `SYS_LOG_ROTATE=<bytes>`, `SYS_LOG_BACKUPS=<n>`, `SYS_LOG_LEVEL=INFO|DEBUG`, `SYS_TOKEN`
+- Network: `SYS_HOST=127.0.0.1`, `SYS_PORT=7010` (default)
 
 Errors
 - `E_NO_BINARY`, `E_TIMEOUT`, `E_FORBIDDEN`, `E_UNSUPPORTED`
+
+Logging & Audit
+- JSONL audit (planned) for diagnostics run under `SYS_LOG_DIR`.
+- Optional app log file as configured via `SYS_LOG_DIR`/`SYS_LOG_FILE` with rotation options.
 
 ## Test UIs
 - `/docs` (Swagger) for REST actions (`/actions/*`).

@@ -33,7 +33,18 @@
 - PRs: include summary, rationale, test plan (commands), and any screenshots of `/search` or `/mem` pages if UI changes impact behavior.
 
 ## Security & Configuration Tips
-- Do not commit secrets or local DBs. Use env tokens for auth (`CLS_TOKEN`, `MEM_TOKEN`). Default ports: 7080 (CLS), 7090 (MEM), 7070 (Prior‑Self). Data roots default to `~/.roadnerd/...`.
+- Do not commit secrets or local DBs. Use env tokens for auth (`CLS_TOKEN`, `MEM_TOKEN`). Default ports:
+  - 7010 SysDiag‑MCP (`SYS_HOST`, `SYS_PORT`)
+  - 7020 Docker‑MCP (`DOCKER_MCP_HOST`, `DOCKER_MCP_PORT`)
+  - 7030 Net‑MCP (`NET_HOST`, `NET_PORT`)
+  - 7040 Service‑MCP (`SVC_HOST`, `SVC_PORT`)
+  - 7050 Git‑My‑Way‑MCP (`GMW_HOST`, `GMW_PORT`)
+  - 7060 Test‑Start‑MCP (`TSM_HOST`, `TSM_PORT`)
+  - 7070 Prior‑Self‑MCP
+  - 7080 Code‑Log‑Search‑MCP
+  - 7090 Memory‑MCP
+  - Data roots default to `~/.roadnerd/...`.
+  - Dev runners may free their ports before starting to enforce a singleton.
 
 ## GPT/Claude/Gemini Notes
 - Use repo `.venv` only; runners detect and use it automatically.
