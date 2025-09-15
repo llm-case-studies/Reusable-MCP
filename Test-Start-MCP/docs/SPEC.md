@@ -65,6 +65,11 @@ Test UIs
 Singleton policy
 - One instance per machine: the dev runner frees the configured port before starting to avoid stale processes.
 
+Admin & Pre‑flight
+- Agents should pre‑flight with a dedicated check (see Admin/Pre‑flight spec) rather than attempt execution first.
+- Admin UI provides safe, TTL‑bound approvals by absolute path or by scope+patterns, plus session profiles (tester/reviewer/developer/architect).
+- Details: `Test-Start-MCP/docs/ADMIN-PREFLIGHT-SPEC.md`
+
 Attach‑on‑Request
 - If the model requests `test-start/run_script`, attach server and call it. Prefer SSE for live output.
 
