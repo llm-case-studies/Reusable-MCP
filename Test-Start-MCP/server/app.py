@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Optional
 try:
     from fastapi import FastAPI, Request, Query
     from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
+    from fastapi.staticfiles import StaticFiles
+    from fastapi.templating import Jinja2Templates
     import uvicorn
 except Exception:
     print("Missing dependencies: fastapi, uvicorn")
@@ -51,6 +53,16 @@ def create_app() -> FastAPI:
     lvl = os.environ.get('TSM_LOG_LEVEL', 'INFO').upper()
     logging.basicConfig(level=getattr(logging, lvl, logging.INFO), format='[%(levelname)s] %(message)s')
     LOG = logging.getLogger('test-start-mcp')
+
+    # Static files and templates (for UI pages)
+    try:
+        static_dir = Path(__file__).parent / 'static'
+        templates_dir = Path(__file__).parent / 'templates'
+        app.mount('/static', StaticFiles(directory=str(static_dir)), name='static')
+        templates = Jinja2Templates(directory=str(templates_dir))
+    except Exception as e:
+        LOG.error(f"Templates initialization failed: {e}")
+        templates = None  # In case of missing fastapi optional deps; UI routes will fallback
 
     # In-memory preflight cache: (sessionId,path,args) -> timestamp ms
     _pref_cache: Dict[str, int] = {}
@@ -566,7 +578,9 @@ def create_app() -> FastAPI:
             return JSONResponse({'error': 'invalid payload'}, status_code=400)
 
     @app.get('/mcp_ui')
-    async def mcp_ui():
+    async def mcp_ui(request: Request):
+        if templates is not None:
+            return templates.TemplateResponse('mcp-ui.html', {'request': request})
         from pathlib import Path as _P
         _default_script = str(_P(__file__).resolve().parents[1] / 'run-tests-and-server.sh')
         html = """
@@ -641,7 +655,10 @@ def create_app() -> FastAPI:
         return HTMLResponse(content=html)
 
     @app.get('/start')
-    async def start_ui():
+    async def start_ui(request: Request):
+        if templates is not None:
+            _default_script = str(Path(__file__).resolve().parents[1] / 'run-tests-and-server.sh')
+            return templates.TemplateResponse('start.html', {'request': request, 'default_script': _default_script})
         from pathlib import Path as _P
         _default_script = str(_P(__file__).resolve().parents[1] / 'run-tests-and-server.sh')
         html = """
@@ -830,15 +847,21 @@ def create_app() -> FastAPI:
         token = os.environ.get('TSM_ADMIN_TOKEN')
         if not token:
             return False
+        # Check Authorization header
         hdr = req.headers.get('Authorization','')
         if hdr.startswith('Bearer '):
             return hdr.split(' ',1)[1].strip() == token.strip()
+        # Also check URL parameter for browser convenience
+        if req.query_params.get('admin_token') == token.strip():
+            return True
         return False
 
     @app.get('/admin')
     async def admin_ui(request: Request):
         if not _admin_ok(request):
             return HTMLResponse('<h1>Unauthorized</h1>', status_code=401)
+        if templates is not None:
+            return templates.TemplateResponse('admin.html', {'request': request})
         html = """
         <!DOCTYPE html>
         <html><head><title>Test-Start-MCP Admin</title>

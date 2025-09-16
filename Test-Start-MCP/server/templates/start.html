@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Test-Start-MCP UI</title>
+  <link rel="stylesheet" href="/static/css/admin.css" />
+</head>
+<body>
+  <h1>Test‑Start‑MCP — UI</h1>
+  <small>Authorization uses TSM_TOKEN from localStorage if set.</small>
+
+  <section>
+    <h2>Allowed Scripts</h2>
+    <button onclick="loadAllowed()">List Allowed</button>
+    <pre id="allowedOut">(none)</pre>
+  </section>
+
+  <section>
+    <h2>Run Script (REST)</h2>
+    <label>Path <input id="sp" value="{{ default_script }}"/></label>
+    <label>Args (comma or JSON array) <input id="sa" value="--no-tests,--smoke"/></label>
+    <label>Timeout (ms) <input id="st" value="30000"/></label>
+    <button onclick="runScript()">POST /actions/run_script</button>
+    <pre id="runOut">(no result)</pre>
+  </section>
+
+  <section>
+    <h2>Run Script (SSE)</h2>
+    <label>Path <input id="ssp" value="{{ default_script }}"/></label>
+    <label>Args (comma or JSON array) <input id="ssa" value="--no-tests,--smoke"/></label>
+    <label>Timeout (ms) <input id="sst" value="30000"/></label>
+    <button onclick="startStream()">Open SSE</button>
+    <button onclick="stopStream()">Close SSE</button>
+    <pre id="streamOut">(no stream)</pre>
+  </section>
+
+  <div class="row">
+    <section>
+      <h2>Logs Stream</h2>
+      <button onclick="openLogs()">Open Logs SSE</button>
+      <button onclick="closeLogs()">Close</button>
+      <pre id="logsOut">(no logs)</pre>
+    </section>
+    <section>
+      <h2>Stats & Health</h2>
+      <button onclick="getStats()">POST /actions/get_stats</button>
+      <button onclick="health()">GET /healthz</button>
+      <pre id="statsOut">(no stats)</pre>
+      <pre id="healthOut">(no health)</pre>
+    </section>
+  </div>
+
+  <script src="/static/js/start.js"></script>
+</body>
+</html>
+

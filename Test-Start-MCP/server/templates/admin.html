@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Test-Start-MCP Admin</title>
+  <link rel="stylesheet" href="/static/css/admin.css" />
+</head>
+<body>
+  <h1>Admin — Test-Start-MCP</h1>
+  <small>Token from localStorage TSM_ADMIN_TOKEN</small>
+
+  <section>
+    <button onclick="refresh()">Refresh State</button>
+    <div id="state">(loading)</div>
+  </section>
+
+  <section>
+    <h2>Add Rule</h2>
+    <form onsubmit="return addRule(event)">
+      <label>Type
+        <select id="type">
+          <option value="path">path</option>
+          <option value="scope">scope</option>
+        </select>
+      </label>
+      <label>Path <input id="path" placeholder="/abs/path/script.sh"/></label>
+      <label>Scope Root <input id="scopeRoot" placeholder="/abs/project/root"/></label>
+      <label>Patterns (comma) <input id="patterns" placeholder="scripts/*.sh,run-tests-and-server.sh"/></label>
+      <label>Flags Allowed (comma) <input id="flagsAllowed" placeholder="--smoke,--no-tests"/></label>
+      <label>TTL Seconds <input id="ttlSec" value="86400"/></label>
+      <label>Label <input id="label"/></label>
+      <label>Note <input id="note"/></label>
+      <button type="submit">Add Rule</button>
+    </form>
+    <pre id="addOut">(no result)</pre>
+  </section>
+
+  <section>
+    <h2>Assign Profile Overlay</h2>
+    <form onsubmit="return assignProfile(event)">
+      <label>Session ID <input id="sessId" placeholder="sess-uuid"/></label>
+      <label>Profile
+        <select id="profile"></select>
+      </label>
+      <label>TTL Seconds <input id="sessTtl" value="3600"/></label>
+      <button type="submit">Assign</button>
+    </form>
+    <pre id="profileOut">(no result)</pre>
+  </section>
+
+  <section>
+    <h2>Rules</h2>
+    <table id="rules"><thead><tr><th>ID</th><th>Type</th><th>Path/Scope</th><th>Patterns</th><th>Expires</th><th></th></tr></thead><tbody></tbody></table>
+  </section>
+  <section>
+    <h2>Overlays</h2>
+    <table id="overlays"><thead><tr><th>Session</th><th>Profile</th><th>Expires</th></tr></thead><tbody></tbody></table>
+  </section>
+  <section>
+    <h2>Audit (policy)</h2>
+    <button onclick="loadAudit()">Load Today's Audit</button>
+    <pre id="audit">(none)</pre>
+  </section>
+
+  <script src="/static/js/admin.js"></script>
+</body>
+<!-- See docs/ADMIN-PREFLIGHT-SPEC.md for details -->
+</html>
+

@@ -11,6 +11,7 @@ Status: Implemented. Endpoints: `/actions/run_script`, `/actions/list_allowed`, 
 
 Test UIs
 - `/docs` (Swagger), `/mcp_ui` (MCP playground), `/start` (interactive UI)
+- UI assets are served from `/static` and templates under `server/templates` for easier debugging and maintenance.
 
 Ports
 - Default host/port: `127.0.0.1:7060` (set via `TSM_HOST`, `TSM_PORT`).

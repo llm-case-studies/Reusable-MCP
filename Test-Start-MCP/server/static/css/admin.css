@@ -1,0 +1,10 @@
+body { font-family: system-ui, sans-serif; background: #0b1220; color: #e0e6f0; padding: 20px; }
+section { background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+label { display: block; margin: 6px 0; }
+input, textarea, select { width: 100%; background: #0b1220; color: #e0e6f0; border: 1px solid #374151; border-radius: 6px; padding: 8px; }
+button { background: #2563eb; color: white; border: 0; border-radius: 6px; padding: 8px 12px; cursor: pointer; margin-right: 6px; }
+pre { background: #0b1220; border: 1px solid #1f2937; border-radius: 8px; padding: 10px; max-height: 50vh; overflow: auto; }
+small { color: #94a3b8; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+table{width:100%;border-collapse:collapse}
+th,td{border-bottom:1px solid #1f2937;padding:6px;text-align:left}

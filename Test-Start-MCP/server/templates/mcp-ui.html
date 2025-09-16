@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Test-Start-MCP (MCP UI)</title>
+  <link rel="stylesheet" href="/static/css/admin.css" />
+</head>
+<body>
+  <h1>Test‑Start‑MCP — MCP UI</h1>
+  <small>Authorization uses TSM_TOKEN from localStorage if set.</small>
+
+  <section>
+    <h2>Initialize</h2>
+    <label>Protocol <input id="proto" value="2025-06-18"/></label>
+    <button onclick="initMcp()">initialize</button>
+    <pre id="initOut">(not initialized)</pre>
+  </section>
+  <section>
+    <h2>Tools</h2>
+    <button onclick="listTools()">tools/list</button>
+    <pre id="toolsOut">(no tools)</pre>
+  </section>
+  <section>
+    <h2>Call Tool</h2>
+    <label>Tool name <input id="tname" value="run_script"/></label>
+    <label>Arguments (JSON)<textarea id="targs" rows="6">{}</textarea></label>
+    <button onclick="callTool()">tools/call</button>
+    <pre id="callOut">(no call)</pre>
+  </section>
+  <script src="/static/js/mcp-ui.js"></script>
+</body>
+</html>
+
