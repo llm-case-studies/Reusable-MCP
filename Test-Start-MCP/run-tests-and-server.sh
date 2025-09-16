@@ -38,7 +38,7 @@ export TSM_LOG_LEVEL="${TSM_LOG_LEVEL:-INFO}"
 
 # ----- GPT Enhancement Configuration (edit as needed) -----
 # Admin token for accessing /admin endpoints (set to enable admin features)
-# export TSM_ADMIN_TOKEN="${TSM_ADMIN_TOKEN:-}"
+export TSM_ADMIN_TOKEN="${TSM_ADMIN_TOKEN:-admin123}"
 # Preflight security settings
 export TSM_REQUIRE_PREFLIGHT="${TSM_REQUIRE_PREFLIGHT:-0}"
 export TSM_PREFLIGHT_TTL_SEC="${TSM_PREFLIGHT_TTL_SEC:-600}"
