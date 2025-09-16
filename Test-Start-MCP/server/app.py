@@ -426,6 +426,11 @@ def create_app() -> FastAPI:
                     'Built for safe local starts and smoke tests: allowlists, timeouts, output truncation, and JSONL audit logs. '
                     'Returns stdout/stderr and status; includes logPath to the audit file.'
                 )
+                # Non-standard guidance hint to agents
+                t['x-guidance'] = {
+                    'useAfter': 'check_script',
+                    'requiresPreflight': os.environ.get('TSM_REQUIRE_PREFLIGHT', '0').lower() in ('1','true','yes')
+                }
             elif t.get('name') == 'list_allowed':
                 t['description'] = (
                     'List the scripts and flags explicitly allowed on this host so you can choose safe entry points before run_script.'
@@ -453,7 +458,8 @@ def create_app() -> FastAPI:
                     'adminLink': {'type': 'string'}
                 },
                 'required': ['allowed','reasons','adminLink']
-            }
+            },
+            'x-guidance': { 'useBefore': 'run_script' }
         })
         return tools
 
@@ -461,6 +467,10 @@ def create_app() -> FastAPI:
         if error is not None:
             return {'jsonrpc': '2.0', 'id': id_value, 'error': error}
         return {'jsonrpc': '2.0', 'id': id_value, 'result': result}
+
+    # Stable session id for MCP guidance (not required for auth)
+    import uuid as _uuid
+    _MCP_SESSION_ID = os.environ.get('TSM_MCP_SESSION_ID') or f"sess-{_uuid.uuid4().hex[:8]}"
 
     @app.post('/mcp')
     async def mcp_endpoint(request: Request):
@@ -476,10 +486,38 @@ def create_app() -> FastAPI:
             method = msg.get('method') or ''
 
             if method == 'initialize':
+                # Embed guidance for agents: preflight policy and admin link
+                enforced = os.environ.get('TSM_REQUIRE_PREFLIGHT', '0').lower() in ('1','true','yes')
+                ttl_sec = 0
+                try:
+                    ttl_sec = int(os.environ.get('TSM_PREFLIGHT_TTL_SEC', '600'))
+                except Exception:
+                    ttl_sec = 600
+                allowed_root = os.environ.get('TSM_ALLOWED_ROOT', str(Path(__file__).resolve().parents[1]))
+                instructions = (
+                    'Pre‑flight before run: call check_script; if not allowed, open the admin link and add a TTL‑bound rule; '
+                    'then re‑check and run. Use the X-TSM-Session header if preflight is enforced.'
+                )
                 return _mcp_response(msg_id, result={
                     'protocolVersion': PROTOCOL_VERSION,
                     'capabilities': {'tools': {}},
                     'serverInfo': {'name': 'Test-Start-MCP', 'version': PROTOCOL_VERSION},
+                    'policy': {
+                        'preflight': {
+                            'recommended': True,
+                            'enforced': enforced,
+                            'checkTool': 'check_script',
+                            'sessionHeader': 'X-TSM-Session',
+                            'ttlSec': ttl_sec,
+                            'adminLink': '/admin'
+                        },
+                        'allowedRoot': allowed_root
+                    },
+                    'session': {
+                        'id': _MCP_SESSION_ID,
+                        'header': 'X-TSM-Session'
+                    },
+                    'instructions': instructions,
                 })
 
             if method == 'notifications/initialized':
@@ -568,12 +606,33 @@ def create_app() -> FastAPI:
                     out.append(resp)
             if not out:
                 return JSONResponse(status_code=202, content=None)
-            return JSONResponse(out)
+            # If batch includes initialize, include guidance headers
+            try:
+                has_init = any(isinstance(m, dict) and (m.get('method') or '') == 'initialize' for m in body)
+            except Exception:
+                has_init = False
+            headers = None
+            if has_init:
+                enforced = os.environ.get('TSM_REQUIRE_PREFLIGHT', '0').lower() in ('1','true','yes')
+                headers = {
+                    'X-TSM-Preflight': ('required' if enforced else 'recommended'),
+                    'Mcp-Session-Id': _MCP_SESSION_ID,
+                }
+            return JSONResponse(out, headers=headers or None)
         elif isinstance(body, dict):
             resp = await handle_one(body)
             if resp is None:
                 return JSONResponse(status_code=202, content=None)
-            return JSONResponse(resp)
+            # If this is initialize, include guidance headers
+            is_init = (body.get('method') or '') == 'initialize'
+            headers = None
+            if is_init:
+                enforced = os.environ.get('TSM_REQUIRE_PREFLIGHT', '0').lower() in ('1','true','yes')
+                headers = {
+                    'X-TSM-Preflight': ('required' if enforced else 'recommended'),
+                    'Mcp-Session-Id': _MCP_SESSION_ID,
+                }
+            return JSONResponse(resp, headers=headers or None)
         else:
             return JSONResponse({'error': 'invalid payload'}, status_code=400)
 

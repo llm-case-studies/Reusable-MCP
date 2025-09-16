@@ -27,7 +27,8 @@ const BASE = process.env.TSM_URL || 'http://127.0.0.1:7060'
 const TOKEN = process.env.TSM_TOKEN || ''
 const ART = process.env.TSM_PW_OUT || 'Test-Start-MCP/.pw-artifacts'
 // Default aligns with handover; override with TSM_PLAYWRIGHT_SCRIPT if needed
-const DEFAULT_SCRIPT = process.env.TSM_PLAYWRIGHT_SCRIPT || '/home/alex/Projects/Reusable-MCP/Memory-MCP/run-tests-and-server.sh'
+// Prefer a script under this service's allowed root for out-of-the-box runs
+const DEFAULT_SCRIPT = process.env.TSM_PLAYWRIGHT_SCRIPT || path.resolve(process.cwd(), 'Test-Start-MCP/scripts/probe.sh')
 
 function j(o){ try { return JSON.stringify(o, null, 2) } catch { return String(o) } }
 

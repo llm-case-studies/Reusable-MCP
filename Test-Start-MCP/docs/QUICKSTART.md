@@ -52,6 +52,7 @@ curl -N "http://127.0.0.1:7060/sse/run_script_stream?path=/home/alex/Projects/Re
 Admin & Pre‑flight
 - Recommended workflow: perform a pre‑flight check before running any script; then configure policy in the Admin UI if needed.
 - See Admin/Pre‑flight spec: `Test-Start-MCP/docs/ADMIN-PREFLIGHT-SPEC.md`.
+- Step‑by‑step walkthrough (UI + Admin): `Test-Start-MCP/docs/E2E-TUTORIAL.md`.
 - Highlights:
   - New tool/endpoint (check_script) to verify allow status and get an admin link + suggestions.
   - Admin UI (token‑protected) to add TTL‑bound rules by path or scope+patterns, or assign session profiles (tester/reviewer/developer/architect).

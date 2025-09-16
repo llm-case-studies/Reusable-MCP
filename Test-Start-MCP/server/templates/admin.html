@@ -10,55 +10,55 @@
   <small>Token from localStorage TSM_ADMIN_TOKEN</small>
 
   <section>
-    <button onclick="refresh()">Refresh State</button>
+    <button onclick="refresh()">Refresh State <span class="help-icon" title="Reload the current server state, rules, and overlays from memory">?</span></button>
     <div id="state">(loading)</div>
   </section>
 
   <section>
-    <h2>Add Rule</h2>
+    <h2>Add Rule <span class="help-icon" title="Rules define which scripts and flags are allowed. Path rules allow specific scripts, Scope rules allow patterns within a directory.">?</span></h2>
     <form onsubmit="return addRule(event)">
-      <label>Type
+      <label>Type <span class="help-icon" title="Path: Allow a specific script file. Scope: Allow scripts matching patterns within a directory.">?</span>
         <select id="type">
           <option value="path">path</option>
           <option value="scope">scope</option>
         </select>
       </label>
-      <label>Path <input id="path" placeholder="/abs/path/script.sh"/></label>
-      <label>Scope Root <input id="scopeRoot" placeholder="/abs/project/root"/></label>
-      <label>Patterns (comma) <input id="patterns" placeholder="scripts/*.sh,run-tests-and-server.sh"/></label>
-      <label>Flags Allowed (comma) <input id="flagsAllowed" placeholder="--smoke,--no-tests"/></label>
-      <label>TTL Seconds <input id="ttlSec" value="86400"/></label>
-      <label>Label <input id="label"/></label>
-      <label>Note <input id="note"/></label>
+      <label>Path <span class="help-icon" title="Absolute path to a specific script file (for 'path' type rules only)">?</span> <input id="path" placeholder="/abs/path/script.sh"/></label>
+      <label>Scope Root <span class="help-icon" title="Root directory for pattern matching (for 'scope' type rules only)">?</span> <input id="scopeRoot" placeholder="/abs/project/root"/></label>
+      <label>Patterns (comma) <span class="help-icon" title="File patterns to match within scope root, e.g., '*.sh,test-*.py'">?</span> <input id="patterns" placeholder="scripts/*.sh,run-tests-and-server.sh"/></label>
+      <label>Flags Allowed (comma) <span class="help-icon" title="Command-line flags that are permitted for this script, e.g., '--smoke,--no-tests'">?</span> <input id="flagsAllowed" placeholder="--smoke,--no-tests"/></label>
+      <label>TTL Seconds <span class="help-icon" title="How long this rule stays active (86400 = 24 hours, 0 = permanent)">?</span> <input id="ttlSec" value="86400"/></label>
+      <label>Label <span class="help-icon" title="Optional human-readable name for this rule">?</span> <input id="label"/></label>
+      <label>Note <span class="help-icon" title="Optional description or comment about this rule">?</span> <input id="note"/></label>
       <button type="submit">Add Rule</button>
     </form>
     <pre id="addOut">(no result)</pre>
   </section>
 
   <section>
-    <h2>Assign Profile Overlay</h2>
+    <h2>Assign Profile Overlay <span class="help-icon" title="Temporarily assign a security profile to a session, overriding default permissions.">?</span></h2>
     <form onsubmit="return assignProfile(event)">
-      <label>Session ID <input id="sessId" placeholder="sess-uuid"/></label>
-      <label>Profile
+      <label>Session ID <span class="help-icon" title="Unique identifier for the session (e.g., from MCP client or browser session)">?</span> <input id="sessId" placeholder="sess-uuid"/></label>
+      <label>Profile <span class="help-icon" title="Security profile: tester (basic), reviewer (moderate), developer (full), architect (admin)">?</span>
         <select id="profile"></select>
       </label>
-      <label>TTL Seconds <input id="sessTtl" value="3600"/></label>
+      <label>TTL Seconds <span class="help-icon" title="How long this profile assignment lasts (3600 = 1 hour)">?</span> <input id="sessTtl" value="3600"/></label>
       <button type="submit">Assign</button>
     </form>
     <pre id="profileOut">(no result)</pre>
   </section>
 
   <section>
-    <h2>Rules</h2>
-    <table id="rules"><thead><tr><th>ID</th><th>Type</th><th>Path/Scope</th><th>Patterns</th><th>Expires</th><th></th></tr></thead><tbody></tbody></table>
+    <h2>Rules <span class="help-icon" title="Active permission rules defining which scripts and flags are allowed">?</span></h2>
+    <table id="rules"><thead><tr><th>ID <span class="help-icon" title="Unique identifier for this permission rule">?</span></th><th>Type <span class="help-icon" title="Path: specific script file, Scope: pattern-based directory matching">?</span></th><th>Path/Scope <span class="help-icon" title="For Path: exact file path. For Scope: directory root + patterns">?</span></th><th>Patterns <span class="help-icon" title="File patterns allowed within scope (e.g., *.sh, test-*.py)">?</span></th><th>Expires <span class="help-icon" title="When this rule automatically expires (UTC time)">?</span></th><th>Actions</th></tr></thead><tbody></tbody></table>
   </section>
   <section>
-    <h2>Overlays</h2>
-    <table id="overlays"><thead><tr><th>Session</th><th>Profile</th><th>Expires</th></tr></thead><tbody></tbody></table>
+    <h2>Overlays <span class="help-icon" title="Temporary profile assignments that override default permissions for specific sessions">?</span></h2>
+    <table id="overlays"><thead><tr><th>Session <span class="help-icon" title="Unique session identifier (from MCP client or browser)">?</span></th><th>Profile <span class="help-icon" title="Security level: tester (basic), reviewer (moderate), developer (full), architect (admin)">?</span></th><th>Expires <span class="help-icon" title="When this profile assignment automatically expires (UTC time)">?</span></th></tr></thead><tbody></tbody></table>
   </section>
   <section>
-    <h2>Audit (policy)</h2>
-    <button onclick="loadAudit()">Load Today's Audit</button>
+    <h2>Audit (policy) <span class="help-icon" title="Security audit log showing policy enforcement decisions and rule applications">?</span></h2>
+    <button onclick="loadAudit()">Load Today's Audit <span class="help-icon" title="Fetch security audit log for today showing all policy decisions and rule applications">?</span></button>
     <pre id="audit">(none)</pre>
   </section>
 

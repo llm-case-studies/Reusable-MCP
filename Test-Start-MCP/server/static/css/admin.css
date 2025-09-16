@@ -8,3 +8,5 @@ small { color: #94a3b8; }
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 table{width:100%;border-collapse:collapse}
 th,td{border-bottom:1px solid #1f2937;padding:6px;text-align:left}
+.help-icon{display:inline-block;background:#374151;color:#e0e6f0;border-radius:50%;width:16px;height:16px;text-align:center;font-size:12px;line-height:16px;cursor:help;margin-left:4px;font-weight:bold;opacity:0.8}
+.help-icon:hover{background:#2563eb;opacity:1;transform:scale(1.1);transition:all 0.2s ease}
