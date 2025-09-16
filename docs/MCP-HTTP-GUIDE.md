@@ -50,13 +50,21 @@ Minimal initialize shapes
     "protocolVersion":"2025-06-18",
     "capabilities":{"tools":{"listChanged": false}},
     "serverInfo":{"name":"MyServer","title":"My Server","version":"0.1.0"},
-    "instructions":"Optional human‑readable notes"
+    "instructions":"Optional human‑readable notes",
+    "policy":{ "preflight": { "recommended": true, "enforced": false, "checkTool": "check_script", "sessionHeader": "X-TSM-Session", "ttlSec": 600, "adminLink": "/admin" },
+               "allowedRoot": "/abs/root" },
+    "session": { "id": "sess-xxxx", "header": "X-TSM-Session" }
   }}
   ```
 - Notification (client → server)
   ```json
   {"jsonrpc":"2.0","method":"notifications/initialized"}
   ```
+
+Headers (server → client)
+- Include guidance headers on initialize responses so agents can react without reading docs:
+  - `X-TSM-Preflight: recommended|required` — hints whether preflight is required (server‑side `TSM_REQUIRE_PREFLIGHT`).
+  - `Mcp-Session-Id: sess-xxxx` — optional stable session id; clients MAY echo it using `X-TSM-Session` on subsequent calls.
 
 ## 3) Tools: list and call
 - Capabilities: servers that expose tools MUST advertise `tools` capability (e.g., `{ "tools": { "listChanged": true|false } }`).

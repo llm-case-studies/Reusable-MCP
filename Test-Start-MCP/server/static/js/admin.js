@@ -10,8 +10,17 @@ async function refresh(){
   const profSel = document.getElementById('profile');
   if (profSel){
     profSel.innerHTML = '';
+    const profileDescriptions = {
+      'tester': 'tester (basic security level)',
+      'reviewer': 'reviewer (moderate security level)',
+      'developer': 'developer (full security level)',
+      'architect': 'architect (admin security level)'
+    };
     Object.keys(st.profiles||{}).forEach(name=>{
-      const opt = document.createElement('option'); opt.value=name; opt.textContent=name; profSel.appendChild(opt);
+      const opt = document.createElement('option');
+      opt.value=name;
+      opt.textContent=profileDescriptions[name] || name;
+      profSel.appendChild(opt);
     });
   }
   const tb = document.querySelector('#rules tbody'); tb.innerHTML='';
