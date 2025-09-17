@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test-Start-MCP — Landing</title>
+  <style>
+    body{font-family:system-ui,sans-serif;background:#0b1220;color:#e0e6f0;padding:24px}
+    a{color:#60a5fa;text-decoration:none}
+    a:hover{text-decoration:underline}
+    section{background:#111827;border:1px solid #1f2937;border-radius:8px;padding:16px;margin-bottom:16px}
+    code,pre{background:#0b1220;border:1px solid #1f2937;border-radius:6px;padding:4px}
+    ul{margin:8px 0 0 18px}
+  </style>
+  </head>
+  <body>
+    <h1>Test‑Start‑MCP</h1>
+    <p>Safely start and smoke‑test local MCP services from models when their sandboxes can’t run scripts. This service enforces allowlists, pre‑flight, overlays, and audits to keep human approval in control.</p>
+
+    <section>
+      <h2>Quick Links (UIs)</h2>
+      <ul>
+        <li><a href="/mcp_ui">MCP Playground</a> — initialize, list tools, call tools</li>
+        <li><a href="/start">Runner UI</a> — list allowed, run (REST), run (SSE), logs, stats/health</li>
+        <li><a href="/admin">Admin</a> — add/remove rules, assign overlays, view policy audit</li>
+        <li><a href="/docs">Swagger Docs</a> and <a href="/redoc">ReDoc</a></li>
+        <li><a href="/healthz">Health</a></li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Docs (inline)</h2>
+      <ul>
+        <li><a href="/docs/view?name=readme">README</a></li>
+        <li><a href="/docs/view?name=quickstart">Quickstart</a></li>
+        <li><a href="/docs/view?name=e2e">E2E Tutorial</a></li>
+        <li><a href="/docs/view?name=policy">Policy Roadmap (backlog)</a></li>
+        <li><a href="/docs/view?name=playwright">Playwright UI Smoke</a></li>
+        <li><a href="/docs/view?name=adminspec">Admin + Pre‑flight Spec</a></li>
+        <li><a href="/docs/view?name=spec">Service Spec</a></li>
+        <li><a href="/docs/view?name=testplan">Test Plan</a></li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Tips</h2>
+      <ul>
+        <li>Set <code>TSM_TOKEN</code> in localStorage to authenticate UIs.</li>
+        <li>Use <code>check_script</code> before <code>run_script</code>; when enforced, include <code>preflight_token</code>.</li>
+        <li>Assign session overlays in Admin to clamp runtime caps per project or path.</li>
+      </ul>
+    </section>
+  </body>
+  </html>
+

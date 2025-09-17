@@ -65,6 +65,13 @@ class Overlay:
     sessionId: str
     profile: str
     expiresAt: Optional[str] = None
+    # Optional selectors for precision overlays (Phase B)
+    path: Optional[str] = None
+    scopeRoot: Optional[str] = None
+    patterns: Optional[List[str]] = None
+    # Multiple overlays per session support
+    id: Optional[str] = None
+    createdAt: Optional[str] = None
 
 
 @dataclass
@@ -168,17 +175,44 @@ def evaluate_preflight(path: str, args: Optional[List[str]], session_id: Optiona
 
     # Overlay profile (highest priority)
     st = state or PolicyState()
-    overlay = None
+    # Choose best overlay for session/path: path > scope > session-only
+    selected_overlay: Optional[Overlay] = None
     if session_id:
         now = datetime.now(timezone.utc)
-        for o in st.overlays:
-            if o.sessionId == session_id:
+        try:
+            for o in st.overlays:
+                if o.sessionId != session_id:
+                    continue
                 exp = _parse_iso(o.expiresAt)
-                if exp is None or exp > now:
-                    overlay = o
-                    break
-        if overlay and overlay.profile in st.profiles:
-            prof = st.profiles[overlay.profile]
+                if exp is not None and exp <= now:
+                    continue
+                # Specific: path match
+                if o.path:
+                    try:
+                        if Path(o.path).resolve() == p:
+                            selected_overlay = o
+                            break
+                    except Exception:
+                        pass
+                # Scope match
+                if not selected_overlay and o.scopeRoot and o.patterns:
+                    try:
+                        root = Path(o.scopeRoot).resolve()
+                        if _is_under_root(p, root):
+                            rel = str(p.relative_to(root))
+                            pats = list(o.patterns or [])
+                            if any(fnmatch.fnmatch(rel, pat) for pat in pats):
+                                selected_overlay = o
+                                # keep searching in case path overlay later — but our order ensures path would have been seen
+                    except Exception:
+                        pass
+                # Session-only as fallback
+                if not selected_overlay and not o.path and not o.scopeRoot:
+                    selected_overlay = o
+        except Exception:
+            selected_overlay = None
+        if selected_overlay and selected_overlay.profile in st.profiles:
+            prof = st.profiles[selected_overlay.profile]
             if prof.flagsAllowed:
                 effective_allowed_flags = effective_allowed_flags.intersection(set(prof.flagsAllowed))
 
@@ -250,18 +284,59 @@ def effective_caps_for(path: str, session_id: Optional[str], allowed_root: Path,
     if not _is_under_root(p, allowed_root):
         return None
 
-    # Overlay caps
+    # Overlay caps (path > scope > session-only)
     overlay_caps: Optional[Caps] = None
     if session_id:
         now = datetime.now(timezone.utc)
-        for o in st.overlays:
-            if o.sessionId == session_id:
+        try:
+            # First: path overlays
+            for o in st.overlays:
+                if o.sessionId != session_id or not o.path:
+                    continue
                 exp = _parse_iso(o.expiresAt)
-                if exp is None or exp > now:
+                if exp is not None and exp <= now:
+                    continue
+                try:
+                    if Path(o.path).resolve() == p:
+                        prof = st.profiles.get(o.profile)
+                        if prof and prof.caps:
+                            overlay_caps = prof.caps
+                            break
+                except Exception:
+                    continue
+            # Second: scope overlays
+            if overlay_caps is None:
+                for o in st.overlays:
+                    if o.sessionId != session_id or not (o.scopeRoot and o.patterns):
+                        continue
+                    exp = _parse_iso(o.expiresAt)
+                    if exp is not None and exp <= now:
+                        continue
+                    try:
+                        root = Path(o.scopeRoot).resolve()
+                        if _is_under_root(p, root):
+                            rel = str(p.relative_to(root))
+                            if any(fnmatch.fnmatch(rel, pat) for pat in (o.patterns or [])):
+                                prof = st.profiles.get(o.profile)
+                                if prof and prof.caps:
+                                    overlay_caps = prof.caps
+                                    break
+                    except Exception:
+                        continue
+            # Third: session-only overlays
+            if overlay_caps is None:
+                for o in st.overlays:
+                    if o.sessionId != session_id or (o.path or o.scopeRoot):
+                        continue
+                    exp = _parse_iso(o.expiresAt)
+                    if exp is not None and exp <= now:
+                        continue
                     prof = st.profiles.get(o.profile)
                     if prof and prof.caps:
                         overlay_caps = prof.caps
-                    break
+                        break
+        except Exception:
+            overlay_caps = overlay_caps
 
     # Matched rule caps
     rule_caps: Optional[Caps] = None
