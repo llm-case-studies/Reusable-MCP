@@ -3,6 +3,11 @@ import argparse
 import json
 import logging
 import os
+import time
+import hmac
+import hashlib
+import base64
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -53,6 +58,179 @@ def create_app() -> FastAPI:
     lvl = os.environ.get('TSM_LOG_LEVEL', 'INFO').upper()
     logging.basicConfig(level=getattr(logging, lvl, logging.INFO), format='[%(levelname)s] %(message)s')
     LOG = logging.getLogger('test-start-mcp')
+
+    # ---- Preflight token (Phase A) helpers ----
+    # Compact HMAC-signed token bound to {path,argsHash} with exp
+    _PREFLIGHT_SECRET: Optional[bytes] = None
+    _PREFLIGHT_WARNED = False
+
+    def _b64url(data: bytes) -> str:
+        return base64.urlsafe_b64encode(data).rstrip(b'=').decode('ascii')
+
+    def _b64url_json(obj: Dict[str, Any]) -> str:
+        raw = json.dumps(obj, separators=(',', ':'), ensure_ascii=False).encode('utf-8')
+        return _b64url(raw)
+
+    def _args_hash(args: List[str]) -> str:
+        s = json.dumps(list(args or []), separators=(',', ':'), ensure_ascii=False).encode('utf-8')
+        return _b64url(hashlib.sha256(s).digest())
+
+    def _now_ts() -> int:
+        return int(time.time())
+
+    def _iso_from_ts(ts: int) -> str:
+        try:
+            return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+        except Exception:
+            return str(ts)
+
+    def _get_secret() -> bytes:
+        nonlocal _PREFLIGHT_SECRET, _PREFLIGHT_WARNED
+        if _PREFLIGHT_SECRET is not None:
+            return _PREFLIGHT_SECRET
+        env = os.environ.get('TSM_PREFLIGHT_SECRET')
+        if env:
+            _PREFLIGHT_SECRET = env.encode('utf-8')
+            return _PREFLIGHT_SECRET
+        # Ephemeral per-process secret
+        _PREFLIGHT_SECRET = os.urandom(32)
+        # Warn only when enforcement is on
+        try:
+            enforce = os.environ.get('TSM_REQUIRE_PREFLIGHT', '0').lower() in ('1', 'true', 'yes')
+        except Exception:
+            enforce = False
+        if enforce and not _PREFLIGHT_WARNED:
+            LOG.warning('TSM_REQUIRE_PREFLIGHT=1 but TSM_PREFLIGHT_SECRET is not set; using ephemeral secret (tokens invalidate on restart).')
+            _PREFLIGHT_WARNED = True
+        return _PREFLIGHT_SECRET
+
+    def _ttl_sec() -> int:
+        try:
+            return int(os.environ.get('TSM_PREFLIGHT_TTL_SEC', '600').strip())
+        except Exception:
+            return 600
+
+    def _normalize_path(p: str) -> str:
+        try:
+            return str(Path(p).resolve())
+        except Exception:
+            return str(p)
+
+    def make_preflight_token(path: str, args: List[str]) -> Dict[str, Any]:
+        """Create a compact HMAC token for {path,args} with expiration."""
+        p = _normalize_path(path)
+        ah = _args_hash(list(args or []))
+        iat = _now_ts()
+        exp = iat + _ttl_sec()
+        header = {'alg': 'HS256', 'typ': 'JWT'}
+        payload = {'p': p, 'ah': ah, 'iat': iat, 'exp': exp, 'v': 1}
+        head_b64 = _b64url_json(header)
+        payl_b64 = _b64url_json(payload)
+        to_sign = f"{head_b64}.{payl_b64}".encode('ascii')
+        sig = hmac.new(_get_secret(), to_sign, hashlib.sha256).digest()
+        token = f"{head_b64}.{payl_b64}.{_b64url(sig)}"
+        return {'preflightToken': token, 'expiresAt': _iso_from_ts(exp)}
+
+    def verify_preflight_token(token: Optional[str], path: str, args: List[str]) -> Dict[str, Any]:
+        """Verify token; return { ok, reason } where reason in {missing, invalid, expired, mismatch}."""
+        if not token:
+            return {'ok': False, 'reason': 'missing'}
+        try:
+            parts = str(token).split('.')
+            if len(parts) != 3:
+                return {'ok': False, 'reason': 'invalid'}
+            head_b64, payl_b64, sig_b64 = parts
+            to_sign = f"{head_b64}.{payl_b64}".encode('ascii')
+            want_sig = _b64url(hmac.new(_get_secret(), to_sign, hashlib.sha256).digest())
+            if not hmac.compare_digest(want_sig, sig_b64):
+                return {'ok': False, 'reason': 'invalid'}
+            # Decode payload (handle missing padding)
+            def _b64pad(s: str) -> bytes:
+                pad = '=' * (-len(s) % 4)
+                return base64.urlsafe_b64decode(s + pad)
+            payload = json.loads(_b64pad(payl_b64).decode('utf-8'))
+            exp = int(payload.get('exp', 0))
+            if _now_ts() > exp:
+                return {'ok': False, 'reason': 'expired'}
+            p = str(payload.get('p', ''))
+            ah = str(payload.get('ah', ''))
+            if _normalize_path(path) != p:
+                return {'ok': False, 'reason': 'mismatch'}
+            if _args_hash(list(args or [])) != ah:
+                return {'ok': False, 'reason': 'mismatch'}
+            return {'ok': True}
+        except Exception:
+            return {'ok': False, 'reason': 'invalid'}
+
+    def _enforce_preflight(request: Request, path: str, args: List[str], preflight_token: Optional[str], override_session_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Return error dict when enforcement fails; None when allowed.
+        Accepts either valid token OR legacy session preflight when enforcement enabled.
+        """
+        enforce = os.environ.get('TSM_REQUIRE_PREFLIGHT', '0').lower() in ('1', 'true', 'yes')
+        if not enforce:
+            return None
+        # Token takes precedence if present and valid
+        v = verify_preflight_token(preflight_token, path, list(args))
+        if v.get('ok'):
+            return None
+        # Legacy session preflight
+        session_id = override_session_id or request.headers.get('X-TSM-Session')
+        err_pref = _require_pref_ok(session_id, path, list(args))
+        if err_pref is None:
+            return None
+        # Compose guidance for clients (adminLink + responseTemplate)
+        host = os.environ.get('TSM_HOST', '127.0.0.1')
+        try:
+            port = int(os.environ.get('TSM_PORT', '7060'))
+        except Exception:
+            port = 7060
+        admin_link = f"http://{host}:{port}/admin/new?path=" + str(path)
+        reason = v.get('reason', 'preflight_required') if preflight_token else (err_pref.get('message', 'preflight_required'))
+        return {
+            'error': 'E_POLICY',
+            'message': f'preflight_required: {reason}',
+            'adminLink': admin_link,
+            'responseTemplate': (
+                'The pre‑flight check is required before running this script. '
+                'Please open this URL and add a minimal, time‑bound rule, then re‑run check_script to obtain a token:\n\n'
+                + admin_link +
+                '\n\nOnce approved, call run_script again including the returned preflight_token.'
+            )
+        }
+
+    # ---- Access/request audit (sanitized) ----
+    def _scrub_headers(h: Dict[str, str]) -> Dict[str, str]:
+        keep = {
+            'user-agent', 'origin', 'referer', 'accept', 'content-type',
+            'mcp-protocol-version', 'mcp-session-id'
+        }
+        out: Dict[str, str] = {}
+        for k, v in (h or {}).items():
+            lk = str(k).lower()
+            if lk in ('authorization', 'cookie'):
+                out[k] = '***'
+            elif lk in keep:
+                out[k] = v
+        return out
+
+    def _access_audit(kind: str, endpoint: str, req: Optional[Request], info: Dict[str, Any]) -> None:
+        try:
+            log_dir = Path(os.environ.get('TSM_LOG_DIR', str(Path(__file__).resolve().parents[1] / 'logs')))
+            log_dir.mkdir(parents=True, exist_ok=True)
+            date = time.strftime('%Y%m%d')
+            fp = log_dir / f'access-{date}.jsonl'
+            line = {
+                'ts': int(time.time()*1000),
+                'kind': kind,
+                'endpoint': endpoint,
+                'client': getattr(getattr(req, 'client', None), 'host', None) if req else None,
+                'headers': _scrub_headers({k: v for k, v in (req.headers.items() if req else [])}),
+                'info': info,
+            }
+            with open(fp, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(line, ensure_ascii=False) + '\n')
+        except Exception:
+            LOG.debug('access audit failed')
 
     # Static files and templates (for UI pages)
     try:
@@ -169,6 +347,10 @@ def create_app() -> FastAPI:
         if not auth_ok(request):
             return JSONResponse({'error': 'unauthorized'}, status_code=401)
         scripts = list_allowed_scripts()
+        try:
+            _access_audit('rest', '/actions/list_allowed', request, {'scripts_count': len(scripts)})
+        except Exception:
+            pass
         return JSONResponse({'scripts': scripts})
 
     @app.post('/actions/search_logs')
@@ -217,7 +399,12 @@ def create_app() -> FastAPI:
                 if len(results) >= limit:
                     break
 
-        return JSONResponse({'results': results[:limit], 'total_found': len(results)})
+        out = {'results': results[:limit], 'total_found': len(results)}
+        try:
+            _access_audit('rest', '/actions/search_logs', request, {'query': query, 'returned': len(out['results'])})
+        except Exception:
+            pass
+        return JSONResponse(out)
 
     @app.post('/actions/get_stats')
     async def http_get_stats(request: Request):
@@ -287,6 +474,10 @@ def create_app() -> FastAPI:
         # Convert defaultdict to regular dict and get top 5
         stats['most_used_scripts'] = dict(list(stats['most_used_scripts'].items())[:5])
 
+        try:
+            _access_audit('rest', '/actions/get_stats', request, {'ok': True})
+        except Exception:
+            pass
         return JSONResponse(dict(stats))
 
     @app.post('/actions/run_script')
@@ -298,19 +489,28 @@ def create_app() -> FastAPI:
         args = body.get('args') or []
         env = body.get('env') or {}
         timeout_ms = body.get('timeout_ms')
-        # Enforce preflight if enabled
-        err_pref = _require_pref_ok(request.headers.get('X-TSM-Session'), path, list(args))
+        # Enforce preflight (token or legacy session)
+        err_pref = _enforce_preflight(request, path, list(args), body.get('preflight_token'), override_session_id=body.get('sessionId'))
         if err_pref is not None:
+            try:
+                _access_audit('rest', '/actions/run_script', request, {'path': path, 'args': args, 'blocked': err_pref})
+            except Exception:
+                pass
             return JSONResponse(err_pref, status_code=428)
         ok, err, prep = validate_and_prepare(path, args, env, timeout_ms)
         if not ok:
+            try:
+                _access_audit('rest', '/actions/run_script', request, {'path': path, 'args': args, 'denied': err})
+            except Exception:
+                pass
             return JSONResponse({'error': err.get('code', 'error'), 'message': err.get('message')}, status_code=400 if err.get('code') != 'E_FORBIDDEN' else 403)
         # Enforce caps from policy (overlay/rule) by clamping timeout and output bytes
         try:
             state_fp = Path(os.environ.get('TSM_ALLOWED_FILE', str(Path(__file__).resolve().parents[1] / 'allowlist.json')))
             state = load_state(state_fp)
             allowed_root = Path(os.environ.get('TSM_ALLOWED_ROOT', str(Path(__file__).resolve().parents[1])))
-            caps_eff = effective_caps_for(path, request.headers.get('X-TSM-Session'), allowed_root, state)
+            sess_eff = body.get('sessionId') or request.headers.get('X-TSM-Session')
+            caps_eff = effective_caps_for(path, sess_eff, allowed_root, state)
             if caps_eff:
                 if isinstance(prep.timeout_ms, int):
                     prep.timeout_ms = min(prep.timeout_ms, int(caps_eff.maxTimeoutMs))
@@ -319,6 +519,10 @@ def create_app() -> FastAPI:
         except Exception:
             pass
         result = run_sync(prep)
+        try:
+            _access_audit('rest', '/actions/run_script', request, {'path': path, 'args': args, 'exitCode': result.get('exitCode')})
+        except Exception:
+            pass
         return JSONResponse(result)
 
     @app.get('/sse/logs_stream')
@@ -368,6 +572,8 @@ def create_app() -> FastAPI:
         path: str = Query(...),
         args: Optional[str] = Query(None, description='JSON array of args or comma-separated'),
         timeout_ms: Optional[int] = Query(None),
+        preflight_token: Optional[str] = Query(None),
+        sessionId: Optional[str] = Query(None),
     ):
         if not auth_ok(request):
             return JSONResponse({'error': 'unauthorized'}, status_code=401)
@@ -386,19 +592,27 @@ def create_app() -> FastAPI:
                     parsed_args = [tok for tok in a.split() if tok]
             except Exception:
                 return JSONResponse({'error': 'E_BAD_ARG', 'message': 'args must be JSON array, comma-separated, or space-separated string'}, status_code=400)
-        # Enforce preflight if enabled
-        err_pref = _require_pref_ok(request.headers.get('X-TSM-Session'), path, list(parsed_args))
+        # Enforce preflight (token or legacy session)
+        err_pref = _enforce_preflight(request, path, list(parsed_args), preflight_token, override_session_id=sessionId)
         if err_pref is not None:
+            try:
+                _access_audit('sse', '/sse/run_script_stream', request, {'path': path, 'args': parsed_args, 'blocked': err_pref})
+            except Exception:
+                pass
             return JSONResponse(err_pref, status_code=428)
         ok, err, prep = validate_and_prepare(path, parsed_args, {}, timeout_ms)
         if not ok:
+            try:
+                _access_audit('sse', '/sse/run_script_stream', request, {'path': path, 'args': parsed_args, 'denied': err})
+            except Exception:
+                pass
             return JSONResponse({'error': err.get('code', 'error'), 'message': err.get('message')}, status_code=400 if err.get('code') != 'E_FORBIDDEN' else 403)
         # Clamp runtime caps
         try:
             state_fp = Path(os.environ.get('TSM_ALLOWED_FILE', str(Path(__file__).resolve().parents[1] / 'allowlist.json')))
             state = load_state(state_fp)
             allowed_root = Path(os.environ.get('TSM_ALLOWED_ROOT', str(Path(__file__).resolve().parents[1])))
-            caps_eff = effective_caps_for(path, request.headers.get('X-TSM-Session'), allowed_root, state)
+            caps_eff = effective_caps_for(path, sessionId or request.headers.get('X-TSM-Session'), allowed_root, state)
             if caps_eff:
                 if isinstance(prep.timeout_ms, int):
                     prep.timeout_ms = min(prep.timeout_ms, int(caps_eff.maxTimeoutMs))
@@ -431,6 +645,15 @@ def create_app() -> FastAPI:
                     'useAfter': 'check_script',
                     'requiresPreflight': os.environ.get('TSM_REQUIRE_PREFLIGHT', '0').lower() in ('1','true','yes')
                 }
+                # Advertise optional preflight_token arg
+                try:
+                    props = t.get('inputSchema', {}).get('properties') or {}
+                    props['preflight_token'] = {'type': 'string'}
+                    props['sessionId'] = {'type': 'string'}
+                    props['role'] = {'type': 'string'}
+                    t['inputSchema']['properties'] = props
+                except Exception:
+                    pass
             elif t.get('name') == 'list_allowed':
                 t['description'] = (
                     'List the scripts and flags explicitly allowed on this host so you can choose safe entry points before run_script.'
@@ -445,6 +668,8 @@ def create_app() -> FastAPI:
                 'properties': {
                     'path': {'type': 'string'},
                     'args': {'type': 'array', 'items': {'type': 'string'}},
+                    'sessionId': {'type': 'string'},
+                    'role': {'type': 'string'},
                 },
                 'required': ['path']
             },
@@ -460,6 +685,24 @@ def create_app() -> FastAPI:
                 'required': ['allowed','reasons','adminLink']
             },
             'x-guidance': { 'useBefore': 'run_script' }
+        })
+        # Add an explicit guidance tool for platforms that hide initialize responses
+        tools.append({
+            'name': 'start_here',
+            'title': 'Start Here',
+            'description': 'Guidance for safe usage: check_script first; if blocked, use admin link; then re‑check and run_script.',
+            'inputSchema': { 'type': 'object', 'properties': {} },
+            'outputSchema': {
+                'type': 'object',
+                'properties': {
+                    'instructions': { 'type': 'string' },
+                    'adminLinkBase': { 'type': 'string' },
+                    'preflight': { 'type': 'object' },
+                    'responseTemplate': { 'type': 'string' }
+                },
+                'required': ['instructions','adminLinkBase','preflight','responseTemplate']
+            },
+            'x-guidance': { 'useBefore': 'check_script' }
         })
         return tools
 
@@ -498,7 +741,7 @@ def create_app() -> FastAPI:
                     'Pre‑flight before run: call check_script; if not allowed, open the admin link and add a TTL‑bound rule; '
                     'then re‑check and run. Use the X-TSM-Session header if preflight is enforced.'
                 )
-                return _mcp_response(msg_id, result={
+                out_init = {
                     'protocolVersion': PROTOCOL_VERSION,
                     'capabilities': {'tools': {}},
                     'serverInfo': {'name': 'Test-Start-MCP', 'version': PROTOCOL_VERSION},
@@ -518,29 +761,103 @@ def create_app() -> FastAPI:
                         'header': 'X-TSM-Session'
                     },
                     'instructions': instructions,
-                })
+                }
+                try:
+                    _access_audit('mcp', '/mcp', request, {'method': 'initialize'})
+                except Exception:
+                    pass
+                return _mcp_response(msg_id, result=out_init)
 
             if method == 'notifications/initialized':
                 return None  # notification
 
             if method == 'tools/list':
-                return _mcp_response(msg_id, result={'tools': mcp_tools()})
+                out_tools = {'tools': mcp_tools()}
+                try:
+                    _access_audit('mcp', '/mcp', request, {'method': 'tools/list', 'tools': [t.get('name') for t in out_tools['tools']]})
+                except Exception:
+                    pass
+                return _mcp_response(msg_id, result=out_tools)
 
             if method == 'tools/call':
                 params = msg.get('params') or {}
                 name = params.get('name') or ''
                 arguments = params.get('arguments') or {}
                 try:
+                    if name == 'start_here':
+                        try:
+                            _access_audit('mcp', '/mcp', request, {'method': 'tools/call', 'tool': 'start_here'})
+                        except Exception:
+                            pass
+                        enforced = os.environ.get('TSM_REQUIRE_PREFLIGHT', '0').lower() in ('1','true','yes')
+                        try:
+                            ttl_sec = int(os.environ.get('TSM_PREFLIGHT_TTL_SEC', '600'))
+                        except Exception:
+                            ttl_sec = 600
+                        allowed_root = os.environ.get('TSM_ALLOWED_ROOT', str(Path(__file__).resolve().parents[1]))
+                        host = os.environ.get('TSM_HOST', '127.0.0.1')
+                        try:
+                            port = int(os.environ.get('TSM_PORT', '7060'))
+                        except Exception:
+                            port = 7060
+                        admin_base = f"http://{host}:{port}/admin"
+                        instr = (
+                            'Standard workflow: 1) Call check_script with the intended path and args. 2) If allowed=false: Do NOT modify files yourself. '
+                            'Tell the user to open the admin link from the check_script result and add a minimal TTL‑bound rule (or a scope with patterns). '
+                            '3) Re-run check_script; 4) If allowed=true, call run_script. Use X-TSM-Session if preflight is enforced.'
+                        )
+                        resp_tmpl = (
+                            'The pre‑flight check failed, which means the script is not on the allowlist. To approve it, please open this URL in your browser and add '
+                            'a minimal, time‑bound rule:\n\n{adminLink}\n\nThis opens the admin panel with the script path pre‑filled. '
+                            'Please add the rule (or a scope with safe patterns). Let me know once done, and I will re‑check and proceed.'
+                        )
+                        payload = {
+                            'instructions': instr,
+                            'adminLinkBase': admin_base,
+                            'preflight': {
+                                'recommended': True,
+                                'enforced': enforced,
+                                'checkTool': 'check_script',
+                                'sessionHeader': 'X-TSM-Session',
+                                'ttlSec': ttl_sec,
+                                'adminNewLinkExample': admin_base + '/new?path=/abs/path/to/script.sh',
+                                'allowedRoot': allowed_root,
+                            },
+                            'responseTemplate': resp_tmpl,
+                            'tools': {
+                                'check_script': {'use': '{"path":"/abs/path","args":["--smoke"]}'},
+                                'run_script': {'use': '{"path":"/abs/path","args":["--smoke"],"timeout_ms":90000}'},
+                            }
+                        }
+                        return _mcp_response(msg_id, result={
+                            'content': [{'type': 'text', 'text': instr + ' Admin: ' + admin_base}],
+                            'structuredContent': payload,
+                            'isError': False,
+                        })
                     if name == 'run_script':
                         path = arguments.get('path') or ''
                         args = arguments.get('args') or []
                         env = arguments.get('env') or {}
                         timeout_ms = arguments.get('timeout_ms')
-                        # Enforce preflight if enabled (session via header)
-                        session_id = request.headers.get('X-TSM-Session')
-                        err_pref = _require_pref_ok(session_id, path, list(args))
+                        preflight_token = arguments.get('preflight_token')
+                        role = arguments.get('role')
+                        session_arg = arguments.get('sessionId')
+                        try:
+                            _access_audit('mcp', '/mcp', request, {'method': 'tools/call', 'tool': 'run_script', 'path': path, 'args': args, 'role': role})
+                        except Exception:
+                            pass
+                        # Enforce preflight (token or legacy session)
+                        err_pref = _enforce_preflight(request, path, list(args), preflight_token, override_session_id=session_arg)
                         if err_pref is not None:
-                            return _mcp_response(msg_id, result={'content': [{'type': 'text', 'text': err_pref.get('message', 'preflight required')}], 'structuredContent': {'error': {'code': 'E_POLICY', 'message': err_pref.get('message')}}, 'isError': True})
+                            return _mcp_response(msg_id, result={
+                                'content': [{'type': 'text', 'text': err_pref.get('message', 'preflight required')}],
+                                'structuredContent': {
+                                    'error': {'code': 'E_POLICY', 'message': err_pref.get('message')},
+                                    'adminLink': err_pref.get('adminLink'),
+                                    'responseTemplate': err_pref.get('responseTemplate')
+                                },
+                                'isError': True
+                            })
                         ok, err, prep = validate_and_prepare(path, args, env, timeout_ms)
                         if not ok:
                             return _mcp_response(msg_id, result={'content': [{'type': 'text', 'text': err.get('message', 'error')}], 'structuredContent': {'error': err}, 'isError': True})
@@ -549,7 +866,7 @@ def create_app() -> FastAPI:
                             state_fp = Path(os.environ.get('TSM_ALLOWED_FILE', str(Path(__file__).resolve().parents[1] / 'allowlist.json')))
                             state = load_state(state_fp)
                             allowed_root = Path(os.environ.get('TSM_ALLOWED_ROOT', str(Path(__file__).resolve().parents[1])))
-                            caps_eff = effective_caps_for(path, request.headers.get('X-TSM-Session'), allowed_root, state)
+                            caps_eff = effective_caps_for(path, session_arg or request.headers.get('X-TSM-Session'), allowed_root, state)
                             if caps_eff:
                                 if isinstance(prep.timeout_ms, int):
                                     prep.timeout_ms = min(prep.timeout_ms, int(caps_eff.maxTimeoutMs))
@@ -558,13 +875,23 @@ def create_app() -> FastAPI:
                         except Exception:
                             pass
                         res = run_sync(prep)
+                        try:
+                            _access_audit('mcp', '/mcp', request, {'method': 'tools/call', 'tool': 'run_script', 'path': path, 'exitCode': res.get('exitCode')})
+                        except Exception:
+                            pass
                         return _mcp_response(msg_id, result={'content': [{'type': 'text', 'text': f"exit {res['exitCode']} ({res['duration_ms']}ms)"}], 'structuredContent': res, 'isError': False})
                     if name == 'list_allowed':
                         scripts = list_allowed_scripts()
+                        try:
+                            _access_audit('mcp', '/mcp', request, {'method': 'tools/call', 'tool': 'list_allowed', 'scripts_count': len(scripts)})
+                        except Exception:
+                            pass
                         return _mcp_response(msg_id, result={'content': [{'type': 'text', 'text': f"{len(scripts)} scripts"}], 'structuredContent': {'scripts': scripts}})
                     if name == 'check_script':
                         pth = arguments.get('path') or ''
                         arg_list = arguments.get('args') or []
+                        role = arguments.get('role')
+                        session_arg = arguments.get('sessionId')
                         state_fp = Path(os.environ.get('TSM_ALLOWED_FILE', str(Path(__file__).resolve().parents[1] / 'allowlist.json')))
                         state = load_state(state_fp)
                         allowed_root = Path(os.environ.get('TSM_ALLOWED_ROOT', str(Path(__file__).resolve().parents[1])))
@@ -575,19 +902,48 @@ def create_app() -> FastAPI:
                                 a = a.strip()
                                 if a:
                                     flags_global.append(a)
-                        session_id = request.headers.get('X-TSM-Session')
+                        session_id = session_arg or request.headers.get('X-TSM-Session')
                         allowed, matched, reasons, suggestions = evaluate_preflight(pth, arg_list, session_id, None, None, allowed_root, flags_global, state)
-                        admin_link = '/admin/new?path=' + str(pth)
+                        # Compose absolute admin link for better visibility in platforms
+                        host = os.environ.get('TSM_HOST', '127.0.0.1')
+                        try:
+                            port = int(os.environ.get('TSM_PORT', '7060'))
+                        except Exception:
+                            port = 7060
+                        admin_link = f"http://{host}:{port}/admin/new?path=" + str(pth)
                         if allowed:
                             _record_pref(session_id, str(pth), list(arg_list))
+                        # Issue preflight token when allowed (even if enforcement off)
+                        token_info: Optional[Dict[str, Any]] = None
+                        try:
+                            if allowed:
+                                token_info = make_preflight_token(str(pth), list(arg_list))
+                        except Exception:
+                            token_info = None
+                        try:
+                            _access_audit('mcp', '/mcp', request, {'method': 'tools/call', 'tool': 'check_script', 'path': pth, 'args': arg_list, 'role': role, 'allowed': allowed, 'reasons': reasons})
+                        except Exception:
+                            pass
+                        # Provide human-readable guidance in the content field
+                        text_msg = 'Pre‑flight: Allowed' if allowed else (
+                            'Pre‑flight: Not allowed. Please open ' + admin_link +
+                            ' and add a minimal TTL‑bound rule for this path (or scope + patterns), then re‑run check_script.'
+                        )
                         return _mcp_response(msg_id, result={
-                            'content': [{'type': 'text', 'text': ('Allowed' if allowed else 'Not allowed') }],
+                            'content': [{'type': 'text', 'text': text_msg}],
                             'structuredContent': {
                                 'allowed': allowed,
                                 'reasons': reasons,
                                 'matchedRule': matched,
                                 'suggestions': suggestions,
                                 'adminLink': admin_link,
+                                **(token_info or {}),
+                                'responseTemplate': (
+                                    'The pre‑flight check failed, which means the script is not on the allowlist. '
+                                    'To approve it, please open this URL in your browser and add a minimal, time‑bound rule:\n\n' + admin_link +
+                                    '\n\nThis opens the admin panel with the script path pre‑filled. Please add the rule (or a scope with safe patterns). '
+                                    'Let me know once done, and I will re‑check and proceed.'
+                                )
                             },
                             'isError': False,
                         })
@@ -639,7 +995,11 @@ def create_app() -> FastAPI:
     @app.get('/mcp_ui')
     async def mcp_ui(request: Request):
         if templates is not None:
-            return templates.TemplateResponse('mcp-ui.html', {'request': request})
+            try:
+                return templates.TemplateResponse(request, 'mcp-ui.html', {})
+            except TypeError:
+                # Fallback for older Starlette versions
+                return templates.TemplateResponse('mcp-ui.html', {'request': request})
         from pathlib import Path as _P
         _default_script = str(_P(__file__).resolve().parents[1] / 'run-tests-and-server.sh')
         html = """
@@ -712,6 +1072,99 @@ def create_app() -> FastAPI:
         </html>
         """
         return HTMLResponse(content=html)
+
+    # ---- Human landing page and simple docs viewer ----
+    @app.get('/')
+    async def landing(request: Request):
+        if templates is not None:
+            try:
+                return templates.TemplateResponse(request, 'landing.html', {})
+            except TypeError:
+                return templates.TemplateResponse('landing.html', {'request': request})
+        html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Test-Start-MCP — Landing</title>
+          <style>
+            body{font-family:system-ui,sans-serif;background:#0b1220;color:#e0e6f0;padding:24px}
+            a{color:#60a5fa;text-decoration:none}
+            a:hover{text-decoration:underline}
+            section{background:#111827;border:1px solid #1f2937;border-radius:8px;padding:16px;margin-bottom:16px}
+            code,pre{background:#0b1220;border:1px solid #1f2937;border-radius:6px;padding:4px}
+            ul{margin:8px 0 0 18px}
+          </style>
+        </head>
+        <body>
+          <h1>Test‑Start‑MCP</h1>
+          <p>Safely start and smoke‑test local MCP services from models when their sandboxes can’t run scripts. This service enforces allowlists, pre‑flight, overlays, and audits to keep human approval in control.</p>
+
+          <section>
+            <h2>Quick Links (UIs)</h2>
+            <ul>
+              <li><a href="/mcp_ui">MCP Playground</a> — initialize, list tools, call tools</li>
+              <li><a href="/start">Runner UI</a> — list allowed, run (REST), run (SSE), logs, stats/health</li>
+              <li><a href="/admin">Admin</a> — add/remove rules, assign overlays, view policy audit</li>
+              <li><a href="/docs">Swagger Docs</a> and <a href="/redoc">ReDoc</a></li>
+              <li><a href="/healthz">Health</a></li>
+            </ul>
+          </section>
+
+          <section>
+            <h2>Docs (inline)</h2>
+            <ul>
+              <li><a href="/docs/view?name=readme">README</a></li>
+              <li><a href="/docs/view?name=quickstart">Quickstart</a></li>
+              <li><a href="/docs/view?name=e2e">E2E Tutorial</a></li>
+              <li><a href="/docs/view?name=policy">Policy Roadmap (backlog)</a></li>
+              <li><a href="/docs/view?name=playwright">Playwright UI Smoke</a></li>
+              <li><a href="/docs/view?name=adminspec">Admin + Pre‑flight Spec</a></li>
+              <li><a href="/docs/view?name=spec">Service Spec</a></li>
+              <li><a href="/docs/view?name=testplan">Test Plan</a></li>
+            </ul>
+          </section>
+
+          <section>
+            <h2>Tips</h2>
+            <ul>
+              <li>Set <code>TSM_TOKEN</code> in localStorage to authenticate UIs.</li>
+              <li>Use <code>check_script</code> before <code>run_script</code>; when enforced, include <code>preflight_token</code>.</li>
+              <li>Assign session overlays in Admin to clamp runtime caps per project or path.</li>
+            </ul>
+          </section>
+        </body>
+        </html>
+        """
+        return HTMLResponse(html)
+
+    @app.get('/docs/view')
+    async def docs_view(request: Request, name: str):
+        root = Path(__file__).resolve().parents[1]
+        mapping = {
+            'readme': root / 'README.md',
+            'quickstart': root / 'docs' / 'QUICKSTART.md',
+            'e2e': root / 'docs' / 'E2E-TUTORIAL.md',
+            'policy': root / 'docs' / 'POLICY-ROADMAP.md',
+            'playwright': root / 'docs' / 'PLAYWRIGHT-SMOKE.md',
+            'adminspec': root / 'docs' / 'ADMIN-PREFLIGHT-SPEC.md',
+            'spec': root / 'docs' / 'SPEC.md',
+            'testplan': root / 'docs' / 'TEST-PLAN.md',
+        }
+        fp = mapping.get(name)
+        if not fp or not fp.exists():
+            return HTMLResponse('<h1>Not Found</h1>', status_code=404)
+        try:
+            txt = fp.read_text(encoding='utf-8')
+        except Exception as e:
+            return HTMLResponse(f'<h1>Error</h1><pre>{str(e)}</pre>', status_code=500)
+        # Simple preformatted text view
+        safe = txt.replace('&','&amp;').replace('<','&lt;').replace('>','&gt;')
+        body = (
+            "<!DOCTYPE html><html><head><title>" + name + "</title>"+
+            "<style>body{font-family:ui-monospace,monospace;background:#0b1220;color:#e0e6f0;padding:20px} pre{white-space:pre-wrap;background:#111827;border:1px solid #1f2937;border-radius:8px;padding:12px}</style>"+
+            "</head><body><h1>" + name + "</h1><pre>" + safe + "</pre></body></html>"
+        )
+        return HTMLResponse(body)
 
     @app.get('/start')
     async def start_ui(request: Request):
@@ -890,15 +1343,33 @@ def create_app() -> FastAPI:
                 if a:
                     flags_global.append(a)
         allowed, matched, reasons, suggestions = evaluate_preflight(path, args, session_id, None, None, allowed_root, flags_global, state)
-        admin_link = '/admin/new?path=' + str(path)
+        host = os.environ.get('TSM_HOST', '127.0.0.1')
+        try:
+            port = int(os.environ.get('TSM_PORT', '7060'))
+        except Exception:
+            port = 7060
+        admin_link = f"http://{host}:{port}/admin/new?path=" + str(path)
         if allowed:
             _record_pref(session_id, str(path), list(args))
+        # Issue preflight token when allowed
+        token_info: Optional[Dict[str, Any]] = None
+        try:
+            if allowed:
+                token_info = make_preflight_token(str(path), list(args))
+        except Exception:
+            token_info = None
+        message = 'Pre‑flight: Allowed' if allowed else (
+            'Pre‑flight: Not allowed. Please open ' + admin_link +
+            ' and add a minimal TTL‑bound rule for this path (or scope + patterns), then re‑run check_script.'
+        )
         return JSONResponse({
             'allowed': allowed,
             'matchedRule': matched,
             'reasons': reasons,
             'suggestions': suggestions,
             'adminLink': admin_link,
+            'message': message,
+            **(token_info or {}),
         })
 
     # ---- Admin stubs (token required) ----
@@ -920,7 +1391,10 @@ def create_app() -> FastAPI:
         if not _admin_ok(request):
             return HTMLResponse('<h1>Unauthorized</h1>', status_code=401)
         if templates is not None:
-            return templates.TemplateResponse('admin.html', {'request': request})
+            try:
+                return templates.TemplateResponse(request, 'admin.html', {})
+            except TypeError:
+                return templates.TemplateResponse('admin.html', {'request': request})
         html = """
         <!DOCTYPE html>
         <html><head><title>Test-Start-MCP Admin</title>
@@ -947,7 +1421,26 @@ def create_app() -> FastAPI:
           </section>
           <section>
             <h2>Overlays</h2>
-            <table id="overlays"><thead><tr><th>Session</th><th>Profile</th><th>Expires</th></tr></thead><tbody></tbody></table>
+            <table id="overlays"><thead><tr><th>ID</th><th>Session</th><th>Profile</th><th>Select</th><th>Expires</th><th></th></tr></thead><tbody></tbody></table>
+          </section>
+          <section>
+            <h2>Assign Profile Overlay</h2>
+            <label>Session ID <input id="sessId" placeholder="sess-..."/><button onclick="genSess()" type="button">Generate</button></label>
+            <label>Profile 
+              <select id="profSel"></select>
+              <small id="profHint">(profiles load from state)</small>
+            </label>
+            <label>TTL Seconds <input id="ttl" value="3600"/></label>
+            <div>
+              <label><input type="radio" name="sel" value="session" checked/> Session only</label>
+              <label><input type="radio" name="sel" value="path"/> Path</label>
+              <label><input type="radio" name="sel" value="scope"/> Scope</label>
+            </div>
+            <label>Path <input id="selPath" placeholder="/abs/path/script.sh"/></label>
+            <label>Scope Root <input id="selRoot" placeholder="/abs/project/root"/></label>
+            <label>Patterns (comma) <input id="selPats" placeholder="run.sh,scripts/*.sh"/></label>
+            <button onclick="assignOverlay()">Assign Overlay</button>
+            <pre id="ovrOut">(no result)</pre>
           </section>
           <section>
             <h2>Audit (policy)</h2>
@@ -957,11 +1450,25 @@ def create_app() -> FastAPI:
           <script>
           function headers(){ const t = localStorage.getItem('TSM_ADMIN_TOKEN')||''; const h={'Content-Type':'application/json','Accept':'application/json'}; if(t) h['Authorization']='Bearer '+t; return h; }
           function j(o){try{return JSON.stringify(o,null,2)}catch(e){return String(o)}}
+          function genSess(){ const s = 'sess-' + Math.random().toString(16).slice(2,10); document.getElementById('sessId').value=s; }
           async function refresh(){
             const r = await fetch('/admin/state', {headers: headers()});
             if(!r.ok){ document.getElementById('state').textContent='(unauthorized)'; return; }
             const st = await r.json();
             document.getElementById('state').textContent = j({version:st.version, profiles:Object.keys(st.profiles||{})});
+            // Populate profiles dropdown
+            try {
+              const ps = document.getElementById('profSel');
+              if (ps) {
+                ps.innerHTML = '';
+                const keys = Object.keys(st.profiles||{});
+                if (keys.length === 0) {
+                  const opt = document.createElement('option'); opt.value=''; opt.textContent='(no profiles configured)'; ps.appendChild(opt);
+                } else {
+                  keys.forEach(k=>{ const opt = document.createElement('option'); opt.value=k; opt.textContent=k; ps.appendChild(opt); });
+                }
+              }
+            } catch (e) {}
             const tb = document.querySelector('#rules tbody'); tb.innerHTML='';
             (st.rules||[]).forEach(rule=>{
               const tr = document.createElement('tr');
@@ -975,8 +1482,11 @@ def create_app() -> FastAPI:
             });
             const tob = document.querySelector('#overlays tbody'); tob.innerHTML='';
             (st.overlays||[]).forEach(o=>{
+              const sel = o.path ? `path:${o.path}` : (o.scopeRoot? `scope:${o.scopeRoot}|${(o.patterns||[]).join(',')}` : 'session');
               const tr = document.createElement('tr');
-              tr.innerHTML = `<td>${o.sessionId}</td><td>${o.profile}</td><td>${o.expiresAt||''}</td>`;
+              tr.innerHTML = `<td>${o.id||''}</td><td>${o.sessionId}</td><td>${o.profile}</td><td>${sel}</td><td>${o.expiresAt||''}</td><td>${o.id?'<button data-oid="'+o.id+'">remove</button>':''}</td>`;
+              const btn = tr.querySelector('button');
+              if(btn){ btn.onclick = async (ev)=>{ const oid = ev.target.getAttribute('data-oid'); const rr = await fetch('/admin/overlay/remove', {method:'POST', headers: headers(), body: JSON.stringify({id: oid})}); await rr.json(); refresh(); } }
               tob.appendChild(tr);
             });
           }
@@ -985,6 +1495,24 @@ def create_app() -> FastAPI:
             if(!r.ok){ document.getElementById('audit').textContent='(no audit)'; return; }
             const jx = await r.json();
             document.getElementById('audit').textContent = jx.lines.map(l=>j(l)).join('\n');
+          }
+          async function assignOverlay(){
+            const sessionId = document.getElementById('sessId').value.trim();
+            let profile = '';
+            const ps = document.getElementById('profSel'); if (ps) { profile = ps.value; }
+            const ttlSec = parseInt(document.getElementById('ttl').value||'0')||3600;
+            const sel = document.querySelector('input[name="sel"]:checked').value;
+            const body = { sessionId, profile, ttlSec };
+            if(sel==='path'){
+              body.path = document.getElementById('selPath').value.trim();
+            } else if(sel==='scope'){
+              body.scopeRoot = document.getElementById('selRoot').value.trim();
+              body.patterns = (document.getElementById('selPats').value||'').split(',').map(s=>s.trim()).filter(Boolean);
+            }
+            const r = await fetch('/admin/session/profile', {method:'POST', headers: headers(), body: JSON.stringify(body)});
+            const jj = await r.json();
+            document.getElementById('ovrOut').textContent = j(jj);
+            if(jj.ok){ refresh(); }
           }
           refresh();
           </script>
@@ -1076,7 +1604,21 @@ def create_app() -> FastAPI:
             return JSONResponse({'error':'unauthorized'}, status_code=401)
         fp = Path(os.environ.get('TSM_ALLOWED_FILE', str(Path(__file__).resolve().parents[1] / 'allowlist.json')))
         state = load_state(fp)
-        return JSONResponse({'version': state.version, 'rules': [r.__dict__ for r in state.rules], 'overlays': [o.__dict__ for o in state.overlays], 'profiles': {k: {'caps': v.caps.__dict__ if v.caps else {}, 'flagsAllowed': v.flagsAllowed} for k, v in state.profiles.items()}})
+        # Sort overlays deterministically: newest createdAt first; then by expiresAt desc; fallback to original order
+        def _parse_iso(s: Optional[str]) -> float:
+            if not s:
+                return 0.0
+            try:
+                import datetime as _dt
+                if s.endswith('Z'):
+                    s2 = s[:-1] + '+00:00'
+                else:
+                    s2 = s
+                return _dt.datetime.fromisoformat(s2).timestamp()
+            except Exception:
+                return 0.0
+        overlays_sorted = sorted(list(state.overlays or []), key=lambda o: (_parse_iso(getattr(o, 'createdAt', None)), _parse_iso(getattr(o, 'expiresAt', None))), reverse=True)
+        return JSONResponse({'version': state.version, 'rules': [r.__dict__ for r in state.rules], 'overlays': [o.__dict__ for o in overlays_sorted], 'profiles': {k: {'caps': v.caps.__dict__ if v.caps else {}, 'flagsAllowed': v.flagsAllowed} for k, v in state.profiles.items()}})
 
     def _policy_audit(action: str, payload: Dict[str, Any], ok: bool) -> None:
         try:
@@ -1224,6 +1766,9 @@ def create_app() -> FastAPI:
         session_id = body.get('sessionId')
         profile = body.get('profile')
         ttl_sec = body.get('ttlSec') or 3600
+        sel_path = body.get('path')
+        sel_scope_root = body.get('scopeRoot')
+        sel_patterns = body.get('patterns') or None
         if not session_id or not profile:
             return JSONResponse({'ok': False, 'error': 'sessionId_and_profile_required'}, status_code=400)
         state_fp = Path(os.environ.get('TSM_ALLOWED_FILE', str(Path(__file__).resolve().parents[1] / 'allowlist.json')))
@@ -1233,13 +1778,30 @@ def create_app() -> FastAPI:
         # compute expiresAt
         import datetime as _dt
         exp = (_dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(seconds=int(ttl_sec))).isoformat()
-        # Replace or add overlay for session
-        st.overlays = [o for o in st.overlays if o.sessionId != session_id]
-        st.overlays.append(Overlay(sessionId=session_id, profile=profile, expiresAt=exp))
+        # Validate selectors if provided
+        allowed_root = Path(os.environ.get('TSM_ALLOWED_ROOT', str(Path(__file__).resolve().parents[1])))
+        try:
+            if sel_path:
+                rp = Path(sel_path).resolve()
+                if not rp.exists():
+                    return JSONResponse({'ok': False, 'error': 'overlay_path_not_found'}, status_code=400)
+                if allowed_root.resolve() not in rp.parents and rp != allowed_root.resolve():
+                    return JSONResponse({'ok': False, 'error': 'overlay_path_outside_allowed_root'}, status_code=400)
+            if sel_scope_root:
+                rr = Path(sel_scope_root).resolve()
+                if not rr.exists() or not rr.is_dir():
+                    return JSONResponse({'ok': False, 'error': 'overlay_scope_not_found'}, status_code=400)
+                if allowed_root.resolve() not in rr.parents and rr != allowed_root.resolve():
+                    return JSONResponse({'ok': False, 'error': 'overlay_scope_outside_allowed_root'}, status_code=400)
+        except Exception:
+            return JSONResponse({'ok': False, 'error': 'overlay_validation_failed'}, status_code=400)
+        # Append a new overlay (multiple overlays per session supported)
+        from uuid import uuid4
+        st.overlays.append(Overlay(sessionId=session_id, profile=profile, expiresAt=exp, path=sel_path, scopeRoot=sel_scope_root, patterns=sel_patterns, id=f'ovr-{uuid4().hex[:8]}', createdAt=__import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat()))
         try:
             save_state(state_fp, st)
-            _policy_audit('session/profile', {'sessionId': session_id, 'profile': profile, 'expiresAt': exp}, True)
-            return JSONResponse({'ok': True, 'overlay': {'sessionId': session_id, 'profile': profile, 'expiresAt': exp}})
+            _policy_audit('session/profile', {'sessionId': session_id, 'profile': profile, 'expiresAt': exp, 'path': sel_path, 'scopeRoot': sel_scope_root, 'patterns': sel_patterns}, True)
+            return JSONResponse({'ok': True})
         except Exception as e:
             _policy_audit('session/profile', {'sessionId': session_id, 'profile': profile, 'error': str(e)}, False)
             return JSONResponse({'ok': False, 'error': 'persist_failed'}, status_code=500)
@@ -1250,6 +1812,30 @@ def create_app() -> FastAPI:
             return JSONResponse({'error':'unauthorized'}, status_code=401)
         # For now, load_state on demand by callers (stateless). Stub 200.
         return JSONResponse({'ok': True})
+
+    @app.post('/admin/overlay/remove')
+    async def admin_overlay_remove(request: Request):
+        if not _admin_ok(request):
+            return JSONResponse({'error':'unauthorized'}, status_code=401)
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({'ok': False, 'error': 'invalid json'}, status_code=400)
+        oid = body.get('id')
+        if not oid:
+            return JSONResponse({'ok': False, 'error': 'id_required'}, status_code=400)
+        state_fp = Path(os.environ.get('TSM_ALLOWED_FILE', str(Path(__file__).resolve().parents[1] / 'allowlist.json')))
+        st = load_state(state_fp)
+        before = len(st.overlays)
+        st.overlays = [o for o in st.overlays if getattr(o, 'id', None) != oid]
+        try:
+            save_state(state_fp, st)
+            removed = before - len(st.overlays)
+            _policy_audit('overlay/remove', {'id': oid, 'removed': removed}, True)
+            return JSONResponse({'ok': True, 'removed': removed})
+        except Exception as e:
+            _policy_audit('overlay/remove', {'id': oid, 'error': str(e)}, False)
+            return JSONResponse({'ok': False, 'error': 'persist_failed'}, status_code=500)
 
     return app
 
